@@ -1,128 +1,94 @@
-# ONVIF Web Application Backend
+# ONVIF Web Application
 
-This is the backend server for a web application designed to manage, view, and record ONVIF-compliant IP cameras.
+This is a full-stack web application designed to manage and view ONVIF-compliant IP cameras. It consists of a Node.js backend and a React frontend.
 
-## Features (Current)
+## Features
 
-*   **Camera Management**: Register and list ONVIF cameras.
-*   **Connection Testing**: Automatically tests the connection to a camera before saving its details.
-*   **REST API**: Provides a simple API to interact with the camera data.
+*   **Camera Management**: Register, update, and list ONVIF cameras.
+*   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
+*   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
+*   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
 
 ## Technology Stack
 
+### Backend
 *   **Runtime**: [Node.js](https://nodejs.org/)
 *   **Framework**: [Express.js](https://expressjs.com/)
-*   **Database**: [SQLite3](https://www.sqlite.org/index.html)
-*   **Query Builder**: [Knex.js](https://knexjs.org/)
-*   **ONVIF Protocol**: [node-onvif](https://www.npmjs.com/package/node-onvif)
+*   **Database**: [SQLite3](https://www.sqlite.org/index.html) with [Knex.js](https://knexjs.org/)
+*   **ONVIF Protocol**: [onvif](https://www.npmjs.com/package/onvif)
+*   **Video Processing**: [FFmpeg](https://ffmpeg.org/) for RTSP to HLS transcoding.
+*   **CORS**: [cors](https://www.npmjs.com/package/cors) for handling cross-origin requests.
 
-## Prerequisites
+### Frontend
+*   **Framework**: [React](https://reactjs.org/) with [Vite](https://vitejs.dev/)
+*   **Language**: [TypeScript](https://www.typescriptlang.org/)
+*   **UI Library**: [Material-UI (MUI)](https://mui.com/)
+*   **API Client**: [Axios](https://axios-http.com/)
+*   **Video Playback**: [hls.js](https://github.com/video-dev/hls.js)
 
-*   [Node.js](https://nodejs.org/) (v16 or later recommended)
-*   [npm](https://www.npmjs.com/)
+## Project Structure
+
+The project is divided into two main parts:
+
+-   `/backend`: The Node.js/Express server that handles all camera communication and video processing.
+-   `/frontend`: The React single-page application that provides the user interface.
 
 ## Getting Started
 
-1.  **Navigate to the backend directory**:
-    ```sh
-    cd backend
-    ```
+### Prerequisites
 
-2.  **Install dependencies**:
-    ```sh
-    npm install
-    ```
-    This will install all required packages. The database file will be created automatically when the server runs for the first time.
+*   [Node.js](https://nodejs.org/) (v16 or later recommended)
+*   [npm](https://www.npmjs.com/)
+*   [FFmpeg](https://ffmpeg.org/download.html) must be installed on the machine running the backend server and available in the system's PATH.
 
-## Running the Application
+### Installation & Running
 
-There are two ways to run the server:
+You need to run both the backend and frontend servers in separate terminals for the application to work.
 
-*   **Development Mode**:
-    This uses `nodemon` to automatically restart the server when file changes are detected.
-    ```sh
-    npm run dev
-    ```
+**1. Backend Server:**
 
-*   **Production Mode**:
-    ```sh
-    npm start
-    ```
+```sh
+# Navigate to the backend directory
+cd backend
 
-The server will be running at `http://localhost:3001`.
+# Install dependencies
+npm install
+
+# Run the development server
+npm run dev
+```
+The backend will be running at `http://localhost:3001`.
+
+**2. Frontend Server:**
+
+```sh
+# From the project root, navigate to the frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run the development server
+npm run dev
+```
+The frontend will be running at `http://localhost:5173` and should open automatically in your browser.
 
 ## API Endpoints
 
-### Camera Management
+The backend provides the following REST API endpoints.
 
 #### `GET /api/cameras`
-
 Retrieves a list of all registered cameras.
 
-**Example `curl` request**:
-```sh
-curl http://localhost:3001/api/cameras
-```
-
-**Example response**:
-```json
-[
-    {
-        "id": 1,
-        "name": "My First Camera",
-        "host": "192.168.1.100",
-        "port": 80,
-        "user": "admin",
-        "pass": "YourCameraPassword",
-        "created_at": "2023-10-27 10:00:00",
-        "updated_at": "2023-10-27 10:00:00"
-    }
-]
-```
-
 #### `POST /api/cameras`
+Registers a new camera. It tests the ONVIF connection before saving. The request body can optionally include a full `xaddr` for cameras with non-standard ONVIF URLs.
 
-Registers a new camera. It first tests the ONVIF connection and, if successful, saves the camera's information to the database.
+#### `PUT /api/cameras/:id`
+Updates an existing camera's information. Useful for adding or correcting details like the `xaddr`.
+**Example Body**: `{ "xaddr": "http://192.168.1.100:8080/onvif/device_service" }`
 
-**Request Body** (JSON):
-*   `name` (string, required): A friendly name for the camera.
-*   `host` (string, required): The IP address or hostname of the camera.
-*   `port` (integer, optional, defaults to 80): The ONVIF port.
-*   `user` (string, required): The username for the camera.
-*   `pass` (string, required): The password for the camera.
+#### `POST /api/cameras/:id/stream/start`
+Starts the FFmpeg process to convert the camera's RTSP stream to HLS. Returns the relative URL of the HLS playlist (e.g., `/streams/1/index.m3u8`).
 
-**Example `curl` request**:
-```sh
-curl -X POST http://localhost:3001/api/cameras \
--H "Content-Type: application/json" \
--d '{
-  "name": "Living Room Cam",
-  "host": "192.168.1.101",
-  "port": 80,
-  "user": "admin",
-  "pass": "password123"
-}'
-```
-
-**Success Response** (`201 Created`):
-Returns the newly created camera object.
-```json
-{
-    "id": 2,
-    "name": "Living Room Cam",
-    "host": "192.168.1.101",
-    "port": 80,
-    "user": "admin",
-    "pass": "password123",
-    "created_at": "2023-10-27 10:05:00",
-    "updated_at": "2023-10-27 10:05:00"
-}
-```
-
-**Error Response** (`400 Bad Request`):
-If the camera connection fails or fields are missing.
-```json
-{
-    "error": "Camera connection failed. Please check host, port, and credentials. Details: Failed to connect: Wrong password"
-}
-```
+#### `POST /api/cameras/:id/stream/stop`
+Stops the FFmpeg process for the specified camera.
