@@ -12,12 +12,14 @@ function App() {
   const [isLoadingStream, setIsLoadingStream] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
+  const BACKEND_URL = 'http://localhost:3001';
+
   // Effect to stop the stream when the component unmounts or the tab is closed
   useEffect(() => {
     const cleanup = () => {
       if (selectedCamera) {
-        // This is a fire-and-forget call, we don't need to wait for it
-        navigator.sendBeacon(`/api/cameras/${selectedCamera.id}/stream/stop`);
+        // Use fetch with keepalive to ensure the request is sent even when the page is closing
+        fetch(`${BACKEND_URL}/api/cameras/${selectedCamera.id}/stream/stop`, { method: 'POST', keepalive: true });
       }
     };
     window.addEventListener('beforeunload', cleanup);
@@ -51,7 +53,10 @@ function App() {
 
     try {
       const data = await startStream(camera.id);
-      setStreamUrl(data.streamUrl);
+      // Construct the full, absolute URL for the HLS playlist
+      const fullStreamUrl = `${BACKEND_URL}${data.streamUrl}`;
+      console.log(`Full stream URL for player: ${fullStreamUrl}`);
+      setStreamUrl(fullStreamUrl);
     } catch (error) {
       console.error('Failed to start stream:', error);
       setStreamError('Failed to start stream. Please check the backend logs.');

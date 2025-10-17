@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// The base URL will be proxied by the Vite dev server to the backend
-const API_URL = '/api';
+// The full URL of the backend server
+const API_URL = 'http://localhost:3001/api';
 
 export interface Camera {
   id: number;

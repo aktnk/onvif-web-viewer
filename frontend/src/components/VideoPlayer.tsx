@@ -16,7 +16,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ streamUrl }) => {
 
       // hls.js is used for most browsers
       if (Hls.isSupported()) {
-        hls = new Hls();
+        const hlsConfig = {
+          // Give HLS.js more time to fetch the manifest if it's not ready
+          manifestLoadingMaxRetry: 9,
+          manifestLoadingRetryDelay: 1000,
+        };
+        hls = new Hls(hlsConfig);
         hls.loadSource(streamUrl);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
