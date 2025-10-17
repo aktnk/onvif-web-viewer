@@ -11,6 +11,11 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // Also proxy /streams requests to the backend where the files are served
+      '/streams': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 })

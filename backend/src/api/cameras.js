@@ -82,11 +82,8 @@ router.post('/:id/stream/start', async (req, res) => {
     const { id } = req.params;
     try {
         const result = await startStream(Number(id));
-        // It can take a few seconds for the first HLS segments to be generated.
-        // We'll wait a moment before responding to increase the chance the client can play the stream immediately.
-        setTimeout(() => {
-            res.json(result);
-        }, 3000); // Wait 3 seconds for stream to initialize
+        // Respond immediately. The HLS player on the frontend is responsible for polling the playlist.
+        res.json(result);
     } catch (error) {
         console.error(`Error starting stream for camera ${id}:`, error);
         res.status(500).json({ error: error.message });
