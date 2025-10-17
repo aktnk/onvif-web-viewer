@@ -2,6 +2,7 @@
 # Ignore the node_modules directory in the root (if any) and in the backend.
 /node_modules
 /backend/node_modules
+/backend/public
 
 # Databases
 # The database file should not be versioned. 
@@ -36,3 +37,10 @@ coverage
 
 # AI prompt files
 prompt*.txt
+
+# Frontend (Vite + React)
+/frontend/dist
+/frontend/node_modules
+/frontend/.vite
+/frontend/.env.local
+/frontend/.env.*.local
