@@ -1,21 +1,23 @@
-const onvif = require('node-onvif');
+const { Cam } = require('onvif');
 
 async function testConnection(cameraConfig) {
-    const device = new onvif.OnvifDevice({
-      xaddr: `http://${cameraConfig.host}:${cameraConfig.port || 80}/onvif/device_service`,
-      user: cameraConfig.user,
-      pass: cameraConfig.pass
+    return new Promise((resolve, reject) => {
+        console.log(`[onvif] Testing connection to camera: ${cameraConfig.host}:${cameraConfig.port || 80}`);
+        const cam = new Cam({
+            hostname: cameraConfig.host,
+            username: cameraConfig.user,
+            password: cameraConfig.pass,
+            port: cameraConfig.port || 80,
+            timeout: 10000
+        }, function(err) {
+            if (err) {
+                console.error('[onvif] Test Connection Error:', err);
+                return reject(new Error(`[onvif] Test Connection failed: ${err.message}`));
+            }
+            console.log('[onvif] Test connection successful. Device info:', this.device);
+            resolve({ success: true, info: this.device });
+        });
     });
-
-    try {
-        const info = await device.init();
-        console.log(`Successfully connected to ${cameraConfig.host}`);
-        return { success: true, info: info };
-    } catch (error) {
-        console.error(`Failed to connect to ${cameraConfig.host}:`, error.message);
-        // Re-throw a more specific error to be caught by the API layer
-        throw new Error(`Failed to connect: ${error.message}`);
-    }
 }
 
 module.exports = { testConnection };

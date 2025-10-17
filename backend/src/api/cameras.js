@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 const { testConnection } = require('../services/onvifService');
+const { startStream, stopStream } = require('../services/streamService');
 
 // GET /api/cameras - List all cameras
 router.get('/', async (req, res) => {
@@ -16,7 +17,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/cameras - Add a new camera
 router.post('/', async (req, res) => {
-    const { name, host, port, user, pass } = req.body;
+    const { name, host, port, user, pass, xaddr } = req.body; // Added xaddr
 
     if (!name || !host || !user || !pass) {
         return res.status(400).json({ error: 'Missing required fields: name, host, user, pass' });
@@ -24,10 +25,10 @@ router.post('/', async (req, res) => {
 
     try {
         // 1. Test connection to the camera before saving
-        await testConnection({ host, port, user, pass });
+        await testConnection({ host, port, user, pass, xaddr });
 
         // 2. If connection is successful, save to the database
-        const [newCamera] = await db('cameras').insert({ name, host, port, user, pass }).returning('*');
+        const [newCamera] = await db('cameras').insert({ name, host, port, user, pass, xaddr }).returning('*');
         res.status(201).json(newCamera);
 
     } catch (error) {
@@ -43,6 +44,64 @@ router.post('/', async (req, res) => {
 
         console.error('Error adding camera:', error);
         return res.status(500).json({ error: 'An internal server error occurred while adding the camera.' });
+    }
+});
+
+// PUT /api/cameras/:id - Update a camera
+router.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (updates.id) {
+        delete updates.id;
+    }
+
+    if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'No update fields provided.' });
+    }
+
+    try {
+        const count = await db('cameras').where({ id: Number(id) }).update(updates);
+
+        if (count === 0) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const updatedCamera = await db('cameras').where({ id: Number(id) }).first();
+        res.json(updatedCamera);
+
+    } catch (error) {
+        console.error(`Error updating camera ${id}:`, error);
+        res.status(500).json({ error: 'An internal server error occurred while updating the camera.' });
+    }
+});
+
+
+// POST /api/cameras/:id/stream/start - Start a stream
+router.post('/:id/stream/start', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await startStream(Number(id));
+        // It can take a few seconds for the first HLS segments to be generated.
+        // We'll wait a moment before responding to increase the chance the client can play the stream immediately.
+        setTimeout(() => {
+            res.json(result);
+        }, 3000); // Wait 3 seconds for stream to initialize
+    } catch (error) {
+        console.error(`Error starting stream for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/cameras/:id/stream/stop - Stop a stream
+router.post('/:id/stream/stop', (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = stopStream(Number(id));
+        res.json(result);
+    } catch (error) {
+        console.error(`Error stopping stream for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
     }
 });
 

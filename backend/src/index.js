@@ -4,6 +4,9 @@ const port = 3001;
 
 app.use(express.json());
 
+// Serve static files from the "public" directory
+app.use(express.static('public'));
+
 // Import and use camera routes
 const cameraRoutes = require('./api/cameras');
 app.use('/api/cameras', cameraRoutes);
