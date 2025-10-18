@@ -44,3 +44,6 @@ prompt*.txt
 /frontend/.vite
 /frontend/.env.local
 /frontend/.env.*.local
+
+# Recordings
+/backend/recordings

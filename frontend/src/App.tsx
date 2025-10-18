@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Container, CssBaseline, Box, CircularProgress, Alert } from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import { AppBar, Toolbar, Typography, Container, CssBaseline, Box, CircularProgress, Alert, Button } from '@mui/material';
 import CameraList from './components/CameraList';
 import VideoPlayer from './components/VideoPlayer';
-import { getCameras, startStream, stopStream } from './services/api';
+import { getCameras, startStream, stopStream, startRecording, stopRecording } from './services/api';
 import type { Camera } from './services/api';
 import './App.css';
 
@@ -47,8 +47,15 @@ function App() {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [isLoadingStream, setIsLoadingStream] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording'>('idle');
 
   const BACKEND_URL = 'http://localhost:3001';
+
+  // Using a ref to give cleanup effects access to the latest state
+  const stateRef = useRef({ selectedCamera, recordingStatus });
+  useEffect(() => {
+    stateRef.current = { selectedCamera, recordingStatus };
+  });
 
   // Fetch cameras on initial load and handle auto-stream-restart
   useEffect(() => {
@@ -59,13 +66,11 @@ function App() {
         setCameras(camerasData);
         setCamerasError(null);
 
-        // Check session storage for a previously selected camera
         const savedCameraId = sessionStorage.getItem(SESSION_STORAGE_KEY);
         if (savedCameraId) {
           const cameraToRestore = camerasData.find(c => c.id === parseInt(savedCameraId, 10));
           if (cameraToRestore) {
             console.log(`Restoring stream for camera: ${cameraToRestore.name}`);
-            // Use a timeout to ensure this runs after the initial render cycle
             setTimeout(() => handleSelectCamera(cameraToRestore), 0);
           }
         }
@@ -80,24 +85,38 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
 
-  // Effect to stop the stream when the component unmounts or the tab is closed
+  // Effect to handle cleanup on unmount or page unload
   useEffect(() => {
-    const cleanup = () => {
-      if (selectedCamera) {
-        fetch(`${BACKEND_URL}/api/cameras/${selectedCamera.id}/stream/stop`, { method: 'POST', keepalive: true });
+    const handleCleanup = (isUnloading = false) => {
+      const { selectedCamera: currentCamera, recordingStatus: currentRecordingStatus } = stateRef.current;
+      if (currentCamera) {
+        if (currentRecordingStatus === 'recording') {
+          const stopRecUrl = `${BACKEND_URL}/api/cameras/${currentCamera.id}/recording/stop`;
+          isUnloading ? fetch(stopRecUrl, { method: 'POST', keepalive: true }) : stopRecording(currentCamera.id);
+        }
+        const stopStreamUrl = `${BACKEND_URL}/api/cameras/${currentCamera.id}/stream/stop`;
+        isUnloading ? fetch(stopStreamUrl, { method: 'POST', keepalive: true }) : stopStream(currentCamera.id);
       }
     };
-    window.addEventListener('beforeunload', cleanup);
+
+    const handleBeforeUnload = () => handleCleanup(true);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
-      window.removeEventListener('beforeunload', cleanup);
-      if (selectedCamera) {
-        stopStream(selectedCamera.id);
-      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      handleCleanup(false); // Cleanup on component unmount
     };
-  }, [selectedCamera]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // This effect should only run once on mount and unmount
 
   const handleSelectCamera = async (camera: Camera) => {
     setStreamError(null);
+    setRecordingStatus('idle'); // Reset recording status on any camera change
+
+    // If a recording is in progress, stop it before changing streams
+    if (recordingStatus === 'recording' && selectedCamera) {
+      await stopRecording(selectedCamera.id);
+    }
 
     if (selectedCamera && selectedCamera.id !== camera.id) {
       await stopStream(selectedCamera.id);
@@ -136,6 +155,28 @@ function App() {
     }
   };
 
+  const handleStartRecording = async () => {
+    if (!selectedCamera) return;
+    try {
+      await startRecording(selectedCamera.id);
+      setRecordingStatus('recording');
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      setStreamError('Failed to start recording.'); // Reuse stream error state for simplicity
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (!selectedCamera) return;
+    try {
+      await stopRecording(selectedCamera.id);
+      setRecordingStatus('idle');
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+      setStreamError('Failed to stop recording.');
+    }
+  };
+
   return (
     <>
       <CssBaseline />
@@ -159,7 +200,7 @@ function App() {
           />
 
           {selectedCamera && (
-            <Box sx={{ mt: 4 }}>
+            <Box sx={{ mt: 4, p: 2, border: '1px solid grey', borderRadius: '4px' }}>
               <Typography variant="h5" component="h2" gutterBottom>
                 Live Stream: {selectedCamera.name}
               </Typography>
@@ -168,7 +209,26 @@ function App() {
               ) : streamError ? (
                 <Alert severity="error">{streamError}</Alert>
               ) : streamUrl ? (
-                <VideoPlayer streamUrl={streamUrl} />
+                <>
+                  <VideoPlayer streamUrl={streamUrl} />
+                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {recordingStatus === 'idle' ? (
+                      <Button variant="contained" color="primary" onClick={handleStartRecording}>
+                        Start Recording
+                      </Button>
+                    ) : (
+                      <Button variant="contained" color="secondary" onClick={handleStopRecording}>
+                        Stop Recording
+                      </Button>
+                    )}
+                    {recordingStatus === 'recording' && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={20} color="secondary" />
+                        <Typography variant="body1" color="secondary">REC</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                </>
               ) : null}
             </Box>
           )}

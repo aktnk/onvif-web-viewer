@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db/db');
 const { testConnection } = require('../services/onvifService');
 const { startStream, stopStream } = require('../services/streamService');
+const { startRecording, stopRecording } = require('../services/recordingService');
 
 // GET /api/cameras - List all cameras
 router.get('/', async (req, res) => {
@@ -98,6 +99,30 @@ router.post('/:id/stream/stop', (req, res) => {
         res.json(result);
     } catch (error) {
         console.error(`Error stopping stream for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/cameras/:id/recording/start - Start recording
+router.post('/:id/recording/start', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await startRecording(Number(id));
+        res.json(result);
+    } catch (error) {
+        console.error(`Error starting recording for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/cameras/:id/recording/stop - Stop recording
+router.post('/:id/recording/stop', (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = stopRecording(Number(id));
+        res.json(result);
+    } catch (error) {
+        console.error(`Error stopping recording for camera ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
