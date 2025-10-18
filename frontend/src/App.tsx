@@ -6,6 +6,37 @@ import { startStream, stopStream } from './services/api';
 import type { Camera } from './services/api';
 import './App.css';
 
+// Helper function to delay execution
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Polls a URL with HEAD requests until it returns a 200 OK status.
+ * @param url The URL to poll.
+ * @param timeout The total time in ms to poll for before giving up.
+ * @param interval The time in ms between poll attempts.
+ * @returns A promise that resolves when the URL is accessible.
+ */
+async function pollForStream(url: string, timeout = 15000, interval = 1000): Promise<void> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    try {
+      // We use a HEAD request for efficiency, as we only need the status code
+      const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      if (response.ok) { // Status code 200-299
+        console.log(`Stream manifest found at ${url}`);
+        return; // Success
+      }
+      console.log(`Polling for stream... status: ${response.status}`);
+    } catch (error) {
+      // Network errors, etc. We'll just log and retry.
+      console.log('Polling request failed, retrying...', error);
+    }
+    await sleep(interval);
+  }
+  throw new Error(`Timed out after ${timeout / 1000}s waiting for stream to become available.`);
+}
+
+
 function App() {
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
@@ -52,14 +83,21 @@ function App() {
     setIsLoadingStream(true);
 
     try {
+      // 1. Ask the backend to start the stream process
       const data = await startStream(camera.id);
-      // Construct the full, absolute URL for the HLS playlist
       const fullStreamUrl = `${BACKEND_URL}${data.streamUrl}`;
-      console.log(`Full stream URL for player: ${fullStreamUrl}`);
+      console.log(`Stream process started. Polling for manifest at: ${fullStreamUrl}`);
+
+      // 2. Poll until the stream manifest (.m3u8) is available
+      await pollForStream(fullStreamUrl);
+
+      // 3. Set the URL to render the player
       setStreamUrl(fullStreamUrl);
+
     } catch (error) {
-      console.error('Failed to start stream:', error);
-      setStreamError('Failed to start stream. Please check the backend logs.');
+      console.error('Failed to start or poll for stream:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Please check the backend logs.';
+      setStreamError(`Failed to start stream. ${errorMessage}`);
       setSelectedCamera(null);
     } finally {
       setIsLoadingStream(false);
