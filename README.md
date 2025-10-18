@@ -6,6 +6,7 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 
 *   **Camera Management**: Register, update, and list ONVIF cameras.
 *   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
+*   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
 
@@ -92,3 +93,12 @@ Starts the FFmpeg process to convert the camera's RTSP stream to HLS. Returns th
 
 #### `POST /api/cameras/:id/stream/stop`
 Stops the FFmpeg process for the specified camera.
+
+#### `POST /api/cameras/:id/recording/start`
+Starts a new recording for the specified camera. The video is saved as an MP4 file on the server.
+
+#### `POST /api/cameras/:id/recording/stop`
+Stops an in-progress recording and finalizes the MP4 file.
+
+#### `GET /api/recordings`
+Retrieves a list of all completed recordings, including camera name and file details.
