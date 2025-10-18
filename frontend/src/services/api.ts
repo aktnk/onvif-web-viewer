@@ -36,3 +36,16 @@ export const stopRecording = async (id: number): Promise<{ success: boolean }> =
   const response = await axios.post(`${API_URL}/cameras/${id}/recording/stop`);
   return response.data;
 };
+
+export interface Recording {
+  id: number;
+  filename: string;
+  start_time: string;
+  end_time: string;
+  camera_name: string;
+}
+
+export const getRecordings = async (): Promise<Recording[]> => {
+  const response = await axios.get<Recording[]>(`${API_URL}/recordings`);
+  return response.data;
+};

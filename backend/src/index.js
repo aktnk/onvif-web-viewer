@@ -10,10 +10,13 @@ app.use(express.json());
 
 // Serve static files from the "public" directory
 app.use(express.static('public'));
+app.use('/recordings', express.static('recordings'));
 
 // Import and use camera routes
 const cameraRoutes = require('./api/cameras');
+const recordingRoutes = require('./api/recordings');
 app.use('/api/cameras', cameraRoutes);
+app.use('/api/recordings', recordingRoutes);
 
 app.get('/', (req, res) => {
   res.send('ONVIF Backend Server is running!');
