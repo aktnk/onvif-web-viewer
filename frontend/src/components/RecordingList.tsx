@@ -6,10 +6,11 @@ import {
 } from '@mui/material';
 
 interface RecordingListProps {
+    listVersion: number;
     onPlayRecording: (filename: string) => void;
 }
 
-const RecordingList: React.FC<RecordingListProps> = ({ onPlayRecording }) => {
+const RecordingList: React.FC<RecordingListProps> = ({ listVersion, onPlayRecording }) => {
     const [recordings, setRecordings] = useState<Recording[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,7 @@ const RecordingList: React.FC<RecordingListProps> = ({ onPlayRecording }) => {
         };
 
         fetchRecordings();
-    }, []);
+    }, [listVersion]);
 
     if (loading) {
         return <CircularProgress />;

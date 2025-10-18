@@ -63,12 +63,14 @@ function App() {
   const [streamError, setStreamError] = useState<string | null>(null);
     const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording'>('idle');
   
-    // State for playback modal
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [playingRecordingUrl, setPlayingRecordingUrl] = useState<string | null>(null);
-  
-    const BACKEND_URL = 'http://localhost:3001';
-  
+      // State for playback modal
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [playingRecordingUrl, setPlayingRecordingUrl] = useState<string | null>(null);
+    
+      // State to trigger recording list refresh
+      const [recordingListVersion, setRecordingListVersion] = useState(0);
+    
+      const BACKEND_URL = 'http://localhost:3001';  
     // Using a ref to give cleanup effects access to the latest state
     const stateRef = useRef({ selectedCamera, recordingStatus });
     useEffect(() => {
@@ -184,17 +186,17 @@ function App() {
       }
     };
   
-    const handleStopRecording = async () => {
-      if (!selectedCamera) return;
-      try {
-        await stopRecording(selectedCamera.id);
-        setRecordingStatus('idle');
-      } catch (error) {
-        console.error('Failed to stop recording:', error);
-        setStreamError('Failed to stop recording.');
-      }
-    };
-  
+      const handleStopRecording = async () => {
+        if (!selectedCamera) return;
+        try {
+          await stopRecording(selectedCamera.id);
+          setRecordingStatus('idle');
+          setRecordingListVersion(v => v + 1); // Trigger list refresh
+        } catch (error) {
+          console.error('Failed to stop recording:', error);
+          setStreamError('Failed to stop recording.');
+        }
+      };  
     const handlePlayRecording = (filename: string) => {
       const url = `${BACKEND_URL}/recordings/${filename}`;
       setPlayingRecordingUrl(url);
@@ -259,14 +261,13 @@ function App() {
                     </Box>
                   </>
                 ) : null}
-              </Box>
-            )}
-  
-            <RecordingList onPlayRecording={handlePlayRecording} />
-  
-          </Container>
-        </main>
-  
+                          </Box>
+                        )}
+              
+                        <RecordingList listVersion={recordingListVersion} onPlayRecording={handlePlayRecording} />
+              
+                      </Container>
+                    </main>  
         <Modal
           open={isModalOpen}
           onClose={handleCloseModal}
