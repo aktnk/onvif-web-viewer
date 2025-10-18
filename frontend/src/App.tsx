@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Typography, Container, CssBaseline, Box, CircularProgress, Alert } from '@mui/material';
 import CameraList from './components/CameraList';
 import VideoPlayer from './components/VideoPlayer';
-import { startStream, stopStream } from './services/api';
+import { getCameras, startStream, stopStream } from './services/api';
 import type { Camera } from './services/api';
 import './App.css';
 
@@ -20,15 +20,13 @@ async function pollForStream(url: string, timeout = 15000, interval = 1000): Pro
   const startTime = Date.now();
   while (Date.now() - startTime < timeout) {
     try {
-      // We use a HEAD request for efficiency, as we only need the status code
       const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-      if (response.ok) { // Status code 200-299
+      if (response.ok) {
         console.log(`Stream manifest found at ${url}`);
-        return; // Success
+        return;
       }
       console.log(`Polling for stream... status: ${response.status}`);
     } catch (error) {
-      // Network errors, etc. We'll just log and retry.
       console.log('Polling request failed, retrying...', error);
     }
     await sleep(interval);
@@ -36,8 +34,15 @@ async function pollForStream(url: string, timeout = 15000, interval = 1000): Pro
   throw new Error(`Timed out after ${timeout / 1000}s waiting for stream to become available.`);
 }
 
+const SESSION_STORAGE_KEY = 'selectedCameraId';
 
 function App() {
+  // State for camera list
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [camerasLoading, setCamerasLoading] = useState<boolean>(true);
+  const [camerasError, setCamerasError] = useState<string | null>(null);
+
+  // State for selected camera and stream
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [isLoadingStream, setIsLoadingStream] = useState<boolean>(false);
@@ -45,11 +50,40 @@ function App() {
 
   const BACKEND_URL = 'http://localhost:3001';
 
+  // Fetch cameras on initial load and handle auto-stream-restart
+  useEffect(() => {
+    const fetchAndRestore = async () => {
+      try {
+        setCamerasLoading(true);
+        const camerasData = await getCameras();
+        setCameras(camerasData);
+        setCamerasError(null);
+
+        // Check session storage for a previously selected camera
+        const savedCameraId = sessionStorage.getItem(SESSION_STORAGE_KEY);
+        if (savedCameraId) {
+          const cameraToRestore = camerasData.find(c => c.id === parseInt(savedCameraId, 10));
+          if (cameraToRestore) {
+            console.log(`Restoring stream for camera: ${cameraToRestore.name}`);
+            // Use a timeout to ensure this runs after the initial render cycle
+            setTimeout(() => handleSelectCamera(cameraToRestore), 0);
+          }
+        }
+      } catch (err) {
+        setCamerasError('Failed to fetch cameras. Is the backend server running?');
+        console.error(err);
+      } finally {
+        setCamerasLoading(false);
+      }
+    };
+    fetchAndRestore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
+
   // Effect to stop the stream when the component unmounts or the tab is closed
   useEffect(() => {
     const cleanup = () => {
       if (selectedCamera) {
-        // Use fetch with keepalive to ensure the request is sent even when the page is closing
         fetch(`${BACKEND_URL}/api/cameras/${selectedCamera.id}/stream/stop`, { method: 'POST', keepalive: true });
       }
     };
@@ -65,40 +99,38 @@ function App() {
   const handleSelectCamera = async (camera: Camera) => {
     setStreamError(null);
 
-    // If another stream is active, stop it first
     if (selectedCamera && selectedCamera.id !== camera.id) {
       await stopStream(selectedCamera.id);
     }
     
-    // If the same camera is clicked again, toggle it off
     if (selectedCamera && selectedCamera.id === camera.id) {
         await stopStream(camera.id);
         setSelectedCamera(null);
         setStreamUrl(null);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
         return;
     }
 
     setSelectedCamera(camera);
-    setStreamUrl(null); // Clear previous stream URL
+    setStreamUrl(null);
     setIsLoadingStream(true);
 
     try {
-      // 1. Ask the backend to start the stream process
       const data = await startStream(camera.id);
       const fullStreamUrl = `${BACKEND_URL}${data.streamUrl}`;
       console.log(`Stream process started. Polling for manifest at: ${fullStreamUrl}`);
 
-      // 2. Poll until the stream manifest (.m3u8) is available
       await pollForStream(fullStreamUrl);
 
-      // 3. Set the URL to render the player
       setStreamUrl(fullStreamUrl);
+      sessionStorage.setItem(SESSION_STORAGE_KEY, String(camera.id));
 
     } catch (error) {
       console.error('Failed to start or poll for stream:', error);
       const errorMessage = error instanceof Error ? error.message : 'Please check the backend logs.';
       setStreamError(`Failed to start stream. ${errorMessage}`);
       setSelectedCamera(null);
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
     } finally {
       setIsLoadingStream(false);
     }
@@ -119,7 +151,12 @@ function App() {
           <Typography variant="h4" component="h1" gutterBottom>
             Cameras
           </Typography>
-          <CameraList onSelectCamera={handleSelectCamera} />
+          <CameraList 
+            cameras={cameras}
+            loading={camerasLoading}
+            error={camerasError}
+            onSelectCamera={handleSelectCamera} 
+          />
 
           {selectedCamera && (
             <Box sx={{ mt: 4 }}>

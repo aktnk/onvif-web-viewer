@@ -1,33 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { getCameras, type Camera } from '../services/api';
+import React from 'react';
+import type { Camera } from '../services/api';
 import { List, ListItem, ListItemText, Button, CircularProgress, Alert, Box } from '@mui/material';
 
 interface CameraListProps {
+  cameras: Camera[];
+  loading: boolean;
+  error: string | null;
   onSelectCamera: (camera: Camera) => void;
 }
 
-const CameraList: React.FC<CameraListProps> = ({ onSelectCamera }) => {
-  const [cameras, setCameras] = useState<Camera[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchCameras = async () => {
-      try {
-        setLoading(true);
-        const data = await getCameras();
-        setCameras(data);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch cameras. Is the backend server running?');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCameras();
-  }, []);
+const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSelectCamera }) => {
 
   if (loading) {
     return <CircularProgress />;
