@@ -92,18 +92,26 @@ async function startRecording(cameraId) {
         console.log(`FFmpeg recording process for camera ${cameraId} exited with code ${code}`);
         activeRecordings.delete(cameraId);
         
-        // Update the database record on close
-        await db('recordings').where({ id: recording.id }).update({
-            end_time: new Date(),
-            is_finished: true,
-        });
-        console.log(`Recording ${filename} marked as finished.`);
+        // A code of 255 is often sent on SIGINT. A code of 0 is a clean exit.
+        // Any other code indicates a problem.
+        if (code !== 0 && code !== 255) {
+            console.error(`FFmpeg process exited with error code ${code}. Deleting recording record.`);
+            await db('recordings').where({ id: recording.id }).del();
+        } else {
+            // Update the database record on a clean exit
+            await db('recordings').where({ id: recording.id }).update({
+                end_time: new Date(),
+                is_finished: true,
+            });
+            console.log(`Recording ${filename} marked as finished.`);
+        }
     });
 
-    ffmpegProcess.on('error', (err) => {
+    ffmpegProcess.on('error', async (err) => {
         console.error(`Failed to start FFmpeg recording for camera ${cameraId}:`, err);
         activeRecordings.delete(cameraId);
-        // Optionally update the record to indicate an error
+        // Delete the orphaned record from the database
+        await db('recordings').where({ id: recording.id }).del();
     });
 
     return { success: true, message: `Recording started for camera ${cameraId}.`, recordingId: recording.id, filename };
@@ -112,17 +120,37 @@ async function startRecording(cameraId) {
 /**
  * Stops an active recording for a camera.
  * @param {number} cameraId - The ID of the camera.
- * @returns {object} A result object.
+ * @returns {Promise<object>} A promise that resolves when the recording is finalized.
  */
 function stopRecording(cameraId) {
-    if (activeRecordings.has(cameraId)) {
-        const { process, recordingId } = activeRecordings.get(cameraId);
-        console.log(`Stopping recording for camera ${cameraId} (ID: ${recordingId})`);
-        process.kill('SIGINT'); // Gracefully ask FFmpeg to finalize the file
-        // The 'close' event handler will do the cleanup and DB update
-        return { success: true, message: `Stop signal sent to recording process for camera ${cameraId}.` };
-    }
-    return { success: false, message: `No active recording found for camera ${cameraId}.` };
+    return new Promise((resolve, reject) => {
+        if (activeRecordings.has(cameraId)) {
+            const { process, recordingId } = activeRecordings.get(cameraId);
+            console.log(`Stopping recording for camera ${cameraId} (ID: ${recordingId})`);
+
+            // Add a one-time listener for the 'close' event to know when the file is finalized.
+            process.once('close', (code) => {
+                console.log(`Recording process for camera ${cameraId} confirmed closed with code ${code}.`);
+                if (code !== 0 && code !== 255) {
+                    reject(new Error(`Recording process exited with an error code: ${code}`));
+                } else {
+                    // The existing 'close' handler will update the DB. We resolve the promise here.
+                    resolve({ success: true, message: `Recording for camera ${cameraId} stopped and finalized.` });
+                }
+            });
+
+            process.once('error', (err) => {
+                reject(new Error(`Error stopping recording for camera ${cameraId}: ${err.message}`));
+            });
+
+            // Gracefully ask FFmpeg to finalize the file. The 'close' event will fire after this.
+            process.kill('SIGINT');
+            activeRecordings.delete(cameraId); // Remove immediately to prevent duplicate stop commands
+
+        } else {
+            resolve({ success: false, message: `No active recording found for camera ${cameraId}.` });
+        }
+    });
 }
 
 module.exports = { startRecording, stopRecording };
