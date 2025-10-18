@@ -2,7 +2,6 @@
 # Ignore the node_modules directory in the root (if any) and in the backend.
 /node_modules
 /backend/node_modules
-/backend/public
 
 # Databases
 # The database file should not be versioned. 
@@ -46,7 +45,8 @@ GEMINI.md
 /frontend/.env.local
 /frontend/.env.*.local
 
-# Recordings
+# Backend
+/backend/public
 /backend/recordings
 
 # no need file
