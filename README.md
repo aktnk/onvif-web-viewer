@@ -74,9 +74,18 @@ npm run dev
 ```
 The frontend will be running at `http://localhost:5173` and should open automatically in your browser.
 
-## API Endpoints
+## Usage
 
-The backend provides the following REST API endpoints.
+Once the application is running, you can manage your cameras through the web interface.
+
+*   **Adding a Camera**: Click the "Add Camera" button. A dialog will appear asking for the camera's details, including Name, Host/IP Address, ONVIF Port, Username, and Password. The system will test the connection before adding the camera to the list.
+*   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list.
+*   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
+*   **Playback**: A list of completed recordings is available at the bottom of the page. Click the "Play" button to watch a recording in a modal window.
+
+## API Reference
+
+The backend provides the following REST API endpoints for programmatic access or debugging.
 
 #### `GET /api/cameras`
 Retrieves a list of all registered cameras.
