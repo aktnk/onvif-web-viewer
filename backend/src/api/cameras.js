@@ -20,8 +20,8 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const { name, host, port, user, pass, xaddr } = req.body; // Added xaddr
 
-    if (!name || !host || !user || !pass) {
-        return res.status(400).json({ error: 'Missing required fields: name, host, user, pass' });
+    if (!name || !host) {
+        return res.status(400).json({ error: 'Missing required fields: name, host' });
     }
 
     try {
@@ -33,18 +33,19 @@ router.post('/', async (req, res) => {
         res.status(201).json(newCamera);
 
     } catch (error) {
+        console.error('Error adding camera:', error); // Log all errors immediately
+
         // Differentiate between a camera connection error and other internal errors
         if (error.message.startsWith('Failed to connect')) {
-            return res.status(400).json({ error: `Camera connection failed. Please check host, port, and credentials. Details: ${error.message}` });
+            return res.status(400).json({ message: `Camera connection failed. Please check host, port, and credentials. Details: ${error.message}` });
         }
 
         // Handle potential unique constraint violation (e.g., host already exists)
         if (error.code === 'SQLITE_CONSTRAINT') {
-            return res.status(409).json({ error: `A camera with host '${host}' already exists.` });
+            return res.status(409).json({ message: `A camera with host '${host}' already exists.` });
         }
 
-        console.error('Error adding camera:', error);
-        return res.status(500).json({ error: 'An internal server error occurred while adding the camera.' });
+        return res.status(500).json({ message: 'An internal server error occurred while adding the camera.' });
     }
 });
 

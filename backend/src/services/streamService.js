@@ -67,10 +67,11 @@ async function startStream(cameraId) {
         throw new Error(`Camera with ID ${cameraId} not found.`);
     }
 
-    const plainRtspUrl = await getRtspUrl(camera);
+    const originalUrl = await getRtspUrl(camera);
 
-    // Inject username and password into the RTSP URL for FFmpeg authentication
-    const authenticatedRtspUrl = plainRtspUrl.replace('rtsp://', `rtsp://${camera.user}:${encodeURIComponent(camera.pass)}@`);
+    // Use URL object to safely parse and then manually reconstruct the URL
+    const url = new URL(originalUrl);
+    const authenticatedRtspUrl = `rtsp://${camera.user}:${encodeURIComponent(camera.pass)}@${url.hostname}:${url.port}${url.pathname}${url.search}`;
     console.log(`Authenticated RTSP URL for FFmpeg: ${authenticatedRtspUrl}`);
 
     const outputDir = path.join(streamsBasePath, String(cameraId));

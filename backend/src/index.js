@@ -3,6 +3,12 @@ const cors = require('cors');
 const app = express();
 const port = 3001;
 
+// Simple logger middleware to see all incoming requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Enable CORS for requests from the frontend development server
 app.use(cors({ origin: 'http://localhost:5173' }));
 

@@ -17,6 +17,19 @@ export const getCameras = async (): Promise<Camera[]> => {
   return response.data;
 };
 
+export type NewCamera = {
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+};
+
+export const addCamera = async (camera: NewCamera): Promise<Camera> => {
+    const response = await axios.post<Camera>(`${API_URL}/cameras`, camera);
+    return response.data;
+};
+
 export const startStream = async (id: number): Promise<{ streamUrl: string }> => {
   const response = await axios.post<{ streamUrl: string }>(`${API_URL}/cameras/${id}/stream/start`);
   return response.data;

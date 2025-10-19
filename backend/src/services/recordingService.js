@@ -56,8 +56,9 @@ async function startRecording(cameraId) {
         throw new Error(`Camera with ID ${cameraId} not found.`);
     }
 
-    const rtspUrl = await getRtspUrl(camera);
-    const authenticatedRtspUrl = rtspUrl.replace('rtsp://', `rtsp://${camera.user}:${encodeURIComponent(camera.pass)}@`);
+    const originalUrl = await getRtspUrl(camera);
+    const url = new URL(originalUrl); // Use URL to safely parse components
+    const authenticatedRtspUrl = `rtsp://${camera.user}:${encodeURIComponent(camera.pass)}@${url.hostname}:${url.port}${url.pathname}${url.search}`;
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `cam-${cameraId}-${timestamp}.mp4`;
@@ -74,7 +75,8 @@ async function startRecording(cameraId) {
         '-rtsp_transport', 'tcp',
         '-i', authenticatedRtspUrl,
         '-c:v', 'copy', // Copy video stream without re-encoding
-        '-c:a', 'aac',    // Re-encode audio to AAC (most compatible)
+        '-c:a', 'copy',   // Attempt to copy audio stream
+        '-an',          // Disable audio recording if copying fails or no audio stream exists
         '-movflags', 'frag_keyframe+empty_moov', // Allow the MP4 to be streamable and fix issues if recording is interrupted
         outputPath
     ];
@@ -85,7 +87,7 @@ async function startRecording(cameraId) {
     activeRecordings.set(cameraId, { process: ffmpegProcess, recordingId: recording.id });
 
     ffmpegProcess.stderr.on('data', (data) => {
-        console.log(`FFMPEG-REC (cam-${cameraId}): ${data}`);
+        console.error(`FFMPEG-REC (cam-${cameraId}): ${data}`);
     });
 
     ffmpegProcess.on('close', async (code) => {
