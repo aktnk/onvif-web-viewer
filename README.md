@@ -56,10 +56,64 @@ cd backend
 # Install dependencies
 npm install
 
+# Run database migrations (first time setup)
+npx knex migrate:latest
+
 # Run the development server
 npm run dev
 ```
 The backend will be running at `http://localhost:3001`.
+
+### Database Setup (Knex.js)
+
+The backend uses [Knex.js](https://knexjs.org/) as a SQL query builder and migration tool with SQLite3.
+
+**Database Configuration:**
+- Database file: `backend/src/db/dev.sqlite3` (auto-created on first migration)
+- Configuration file: `backend/knexfile.js`
+- Migrations directory: `backend/src/db/migrations/`
+
+**Available Migrations:**
+- `20251015144534_create_cameras_table.js` - Creates the `cameras` table
+- `20251016140916_add_xaddr_to_cameras.js` - Adds `xaddr` column for custom ONVIF URLs
+- `20251018120100_create_recordings_table.js` - Creates the `recordings` table
+
+**Common Knex Commands:**
+
+```sh
+cd backend
+
+# Run all pending migrations
+npx knex migrate:latest
+
+# Rollback the last batch of migrations
+npx knex migrate:rollback
+
+# Check migration status
+npx knex migrate:status
+
+# Create a new migration file
+npx knex migrate:make migration_name
+```
+
+**Database Schema:**
+
+*cameras* table:
+- `id` (primary key, auto-increment)
+- `name` (text) - Camera display name
+- `host` (text) - IP address or hostname
+- `port` (integer) - ONVIF port (default: 80)
+- `user` (text) - ONVIF username
+- `pass` (text) - ONVIF password
+- `xaddr` (text, nullable) - Custom ONVIF device service URL
+
+*recordings* table:
+- `id` (primary key, auto-increment)
+- `camera_id` (integer, foreign key) - Reference to cameras table
+- `filename` (text) - MP4 filename
+- `start_time` (datetime) - Recording start timestamp
+- `end_time` (datetime, nullable) - Recording end timestamp
+- `is_finished` (boolean, default: false) - Recording completion status
 
 **2. Frontend Server:**
 
