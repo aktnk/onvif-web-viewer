@@ -4,6 +4,8 @@ const db = require('../db/db');
 const { testConnection } = require('../services/onvifService');
 const { startStream, stopStream } = require('../services/streamService');
 const { startRecording, stopRecording } = require('../services/recordingService');
+const { scanSubnet, getLocalSubnet } = require('../services/discoveryService');
+const onvif = require('onvif');
 
 // GET /api/cameras - List all cameras
 router.get('/', async (req, res) => {
@@ -14,6 +16,36 @@ router.get('/', async (req, res) => {
     console.error('Database error:', error);
     res.status(500).json({ error: 'Database error while fetching cameras.' });
   }
+});
+
+// GET /api/cameras/discover - Discover ONVIF cameras on the network using subnet scan
+router.get('/discover', async (req, res) => {
+    console.log('[Discovery] Starting subnet scan...');
+
+    try {
+        // Get subnet from query params or auto-detect
+        const subnet = req.query.subnet || getLocalSubnet();
+        const start = parseInt(req.query.start) || (typeof subnet === 'object' ? subnet.start : 1);
+        const end = parseInt(req.query.end) || (typeof subnet === 'object' ? subnet.end : 254);
+
+        // Perform subnet scan
+        const devices = await scanSubnet({
+            subnet,
+            start,
+            end,
+            onProgress: (progress) => {
+                // Log progress
+                if (progress.scanned % 25 === 0 || progress.percentage === 100) {
+                    console.log(`[Discovery] Progress: ${progress.percentage}% (${progress.scanned}/${progress.total}), Found: ${progress.found}`);
+                }
+            }
+        });
+
+        res.json({ devices });
+    } catch (error) {
+        console.error('[Discovery] Error during subnet scan:', error);
+        res.status(500).json({ error: 'Failed to scan subnet', message: error.message });
+    }
 });
 
 // POST /api/cameras - Add a new camera

@@ -30,6 +30,23 @@ export const addCamera = async (camera: NewCamera): Promise<Camera> => {
     return response.data;
 };
 
+export interface DiscoveredDevice {
+  address: string;
+  port: number;
+  hostname: string;
+  name: string;
+  manufacturer: string;
+  xaddr: string | null;
+}
+
+export const discoverCameras = async (): Promise<DiscoveredDevice[]> => {
+  // Subnet scan can take 2-3 minutes, so set a long timeout
+  const response = await axios.get<{ devices: DiscoveredDevice[] }>(`${API_URL}/cameras/discover`, {
+    timeout: 180000 // 3 minutes
+  });
+  return response.data.devices;
+};
+
 export const startStream = async (id: number): Promise<{ streamUrl: string }> => {
   const response = await axios.post<{ streamUrl: string }>(`${API_URL}/cameras/${id}/stream/start`);
   return response.data;

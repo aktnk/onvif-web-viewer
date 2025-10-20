@@ -4,6 +4,7 @@ import CameraList from './components/CameraList';
 import VideoPlayer from './components/VideoPlayer';
 import RecordingList from './components/RecordingList';
 import AddCameraModal from './components/AddCameraModal';
+import DiscoverCamerasModal from './components/DiscoverCamerasModal';
 import { getCameras, startStream, stopStream, startRecording, stopRecording } from './services/api';
 import type { Camera } from './services/api';
 import './App.css';
@@ -70,6 +71,9 @@ function App() {
 
   // State for Add Camera Modal
   const [isAddCameraModalOpen, setIsAddCameraModalOpen] = useState(false);
+
+  // State for Discover Cameras Modal
+  const [isDiscoverModalOpen, setIsDiscoverModalOpen] = useState(false);
 
   // State to trigger recording list refresh
   const [recordingListVersion, setRecordingListVersion] = useState(0);
@@ -235,9 +239,14 @@ function App() {
             <Typography variant="h4" component="h1">
               Cameras
             </Typography>
-            <Button variant="contained" onClick={() => setIsAddCameraModalOpen(true)}>
-              Add Camera
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button variant="outlined" onClick={() => setIsDiscoverModalOpen(true)}>
+                Discover Cameras
+              </Button>
+              <Button variant="contained" onClick={() => setIsAddCameraModalOpen(true)}>
+                Add Camera
+              </Button>
+            </Box>
           </Box>
           <CameraList
             cameras={cameras}
@@ -287,6 +296,11 @@ function App() {
       <AddCameraModal
         open={isAddCameraModalOpen}
         onClose={() => setIsAddCameraModalOpen(false)}
+        onCameraAdded={handleCameraAdded}
+      />
+      <DiscoverCamerasModal
+        open={isDiscoverModalOpen}
+        onClose={() => setIsDiscoverModalOpen(false)}
         onCameraAdded={handleCameraAdded}
       />
       <Modal
