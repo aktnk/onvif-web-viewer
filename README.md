@@ -4,6 +4,7 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 
 ## Features
 
+*   **Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
 *   **Camera Management**: Register, update, and list ONVIF cameras.
 *   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
 *   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application.
@@ -78,7 +79,9 @@ The frontend will be running at `http://localhost:5173` and should open automati
 
 Once the application is running, you can manage your cameras through the web interface.
 
-*   **Adding a Camera**: Click the "Add Camera" button. A dialog will appear asking for the camera's details, including Name, Host/IP Address, ONVIF Port, Username, and Password. The system will test the connection before adding the camera to the list.
+*   **Discovering Cameras**: Click the "Discover Cameras" button to automatically scan your local network (subnet) for ONVIF-compliant cameras. The scan will probe each IP address in your subnet (typically 192.168.0.1-254) and may take 2-3 minutes to complete. Once discovered, you can add cameras to your list by providing their credentials.
+    *   **Note**: This feature uses unicast WS-Discovery probes, which can detect cameras that don't respond to standard multicast discovery.
+*   **Adding a Camera Manually**: Click the "Add Camera" button. A dialog will appear asking for the camera's details, including Name, Host/IP Address, ONVIF Port, Username, and Password. The system will test the connection before adding the camera to the list.
 *   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list.
 *   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
 *   **Playback**: A list of completed recordings is available at the bottom of the page. Click the "Play" button to watch a recording in a modal window.
@@ -89,6 +92,16 @@ The backend provides the following REST API endpoints for programmatic access or
 
 #### `GET /api/cameras`
 Retrieves a list of all registered cameras.
+
+#### `GET /api/cameras/discover`
+Discovers ONVIF cameras on the local network using subnet scanning. This endpoint performs unicast WS-Discovery probes to each IP address in the subnet (default: 192.168.0.1-254). The scan typically takes 2-3 minutes to complete.
+
+**Query Parameters** (optional):
+- `subnet`: Subnet base address (e.g., `192.168.1`)
+- `start`: Starting IP address (e.g., `1`)
+- `end`: Ending IP address (e.g., `254`)
+
+**Response**: Returns an array of discovered devices with their IP addresses, ports, device names, and ONVIF service URLs.
 
 #### `POST /api/cameras`
 Registers a new camera. It tests the ONVIF connection before saving. The request body can optionally include a full `xaddr` for cameras with non-standard ONVIF URLs.
