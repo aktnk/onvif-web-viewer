@@ -6,13 +6,13 @@ const db = require('../db/db');
 router.get('/', async (req, res) => {
   try {
     const recordings = await db('recordings')
-      .join('cameras', 'recordings.camera_id', 'cameras.id')
+      .leftJoin('cameras', 'recordings.camera_id', 'cameras.id')
       .select(
         'recordings.id',
         'recordings.filename',
         'recordings.start_time',
         'recordings.end_time',
-        'cameras.name as camera_name'
+        db.raw("COALESCE(cameras.name, 'Deleted Camera') as camera_name")
       )
       .where('recordings.is_finished', true)
       .orderBy('recordings.start_time', 'desc');
