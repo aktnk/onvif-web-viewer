@@ -5,9 +5,9 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 ## Features
 
 *   **Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
-*   **Camera Management**: Register, update, and list ONVIF cameras.
+*   **Camera Management**: Register, update, delete, and list ONVIF cameras.
 *   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
-*   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application.
+*   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application. Recordings from deleted cameras remain accessible.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
 
@@ -133,12 +133,14 @@ The frontend will be running at `http://localhost:5173` and should open automati
 
 Once the application is running, you can manage your cameras through the web interface.
 
-*   **Discovering Cameras**: Click the "Discover Cameras" button to automatically scan your local network (subnet) for ONVIF-compliant cameras. The scan will probe each IP address in your subnet (typically 192.168.0.1-254) and may take 2-3 minutes to complete. Once discovered, you can add cameras to your list by providing their credentials.
-    *   **Note**: This feature uses unicast WS-Discovery probes, which can detect cameras that don't respond to standard multicast discovery.
-*   **Adding a Camera Manually**: Click the "Add Camera" button. A dialog will appear asking for the camera's details, including Name, Host/IP Address, ONVIF Port, Username, and Password. The system will test the connection before adding the camera to the list.
+*   **Discovering Cameras**: Click the "Discover Cameras" button to automatically scan your local network. The scan will probe each IP address in your subnet and may take 2-3 minutes. 
+    *   Discovered cameras that are already registered will be marked as "Registered".
+    *   You can add unregistered cameras by providing their credentials. The discovery window will remain open, allowing you to add multiple cameras without re-scanning.
+*   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog for the camera's details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera.
+*   **Deleting a Camera**: Click the delete icon next to a camera in the main list. A confirmation prompt will appear before deletion.
 *   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list.
 *   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
-*   **Playback**: A list of completed recordings is available at the bottom of the page. Click the "Play" button to watch a recording in a modal window.
+*   **Playback**: A list of completed recordings is available at the bottom of the page. Click the "Play" button to watch a recording. Recordings from deleted cameras will be labeled accordingly and remain playable.
 
 ## API Reference
 
@@ -164,6 +166,9 @@ Registers a new camera. It tests the ONVIF connection before saving. The request
 Updates an existing camera's information. Useful for adding or correcting details like the `xaddr`.
 **Example Body**: `{ "xaddr": "http://192.168.1.100:8080/onvif/device_service" }`
 
+#### `DELETE /api/cameras/:id`
+Deletes a registered camera from the database.
+
 #### `POST /api/cameras/:id/stream/start`
 Starts the FFmpeg process to convert the camera's RTSP stream to HLS. Returns the relative URL of the HLS playlist (e.g., `/streams/1/index.m3u8`).
 
@@ -177,4 +182,4 @@ Starts a new recording for the specified camera. The video is saved as an MP4 fi
 Stops an in-progress recording and finalizes the MP4 file.
 
 #### `GET /api/recordings`
-Retrieves a list of all completed recordings, including camera name and file details.
+Retrieves a list of all completed recordings, including camera name and file details. Recordings from deleted cameras are included.
