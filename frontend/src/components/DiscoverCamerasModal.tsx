@@ -15,7 +15,7 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { discoverCameras, addCamera, type DiscoveredDevice } from '../services/api';
+import { discoverCameras, addCamera, type DiscoveredDevice, type Camera } from '../services/api';
 
 const modalStyle = {
   position: 'absolute' as 'absolute',
@@ -36,9 +36,10 @@ interface DiscoverCamerasModalProps {
   open: boolean;
   onClose: () => void;
   onCameraAdded: () => void;
+  registeredCameras: Camera[];
 }
 
-const DiscoverCamerasModal: React.FC<DiscoverCamerasModalProps> = ({ open, onClose, onCameraAdded }) => {
+const DiscoverCamerasModal: React.FC<DiscoverCamerasModalProps> = ({ open, onClose, onCameraAdded, registeredCameras }) => {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -166,21 +167,30 @@ const DiscoverCamerasModal: React.FC<DiscoverCamerasModalProps> = ({ open, onClo
                 Found {devices.length} device(s):
               </Typography>
               <List sx={{ bgcolor: 'background.paper', border: '1px solid #ccc', borderRadius: 1 }}>
-                {devices.map((device, index) => (
-                  <ListItem
-                    key={index}
-                    secondaryAction={
-                      <Button variant="outlined" size="small" onClick={() => handleSelectDevice(device)}>
-                        Add
-                      </Button>
-                    }
-                  >
-                    <ListItemText
-                      primary={`${device.name} (${device.manufacturer})`}
-                      secondary={`${device.address}:${device.port}`}
-                    />
-                  </ListItem>
-                ))}
+                {devices.map((device, index) => {
+                  const isRegistered = registeredCameras.some(c => c.host === device.address);
+                  return (
+                    <ListItem
+                      key={index}
+                      secondaryAction={
+                        isRegistered ? (
+                          <Typography variant="body2" color="text.secondary">
+                            Registered
+                          </Typography>
+                        ) : (
+                          <Button variant="outlined" size="small" onClick={() => handleSelectDevice(device)}>
+                            Add
+                          </Button>
+                        )
+                      }
+                    >
+                      <ListItemText
+                        primary={`${device.name} (${device.manufacturer})`}
+                        secondary={`${device.address}:${device.port}`}
+                      />
+                    </ListItem>
+                  );
+                })}
               </List>
             </>
           )}

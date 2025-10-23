@@ -314,6 +314,7 @@ function App() {
         open={isDiscoverModalOpen}
         onClose={() => setIsDiscoverModalOpen(false)}
         onCameraAdded={handleCameraAdded}
+        registeredCameras={cameras}
       />
       <Modal
         open={isPlaybackModalOpen}
