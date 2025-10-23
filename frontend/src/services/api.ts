@@ -79,3 +79,7 @@ export const getRecordings = async (): Promise<Recording[]> => {
   const response = await axios.get<Recording[]>(`${API_URL}/recordings`);
   return response.data;
 };
+
+export const deleteCamera = async (id: number): Promise<void> => {
+  await axios.delete(`${API_URL}/cameras/${id}`);
+};

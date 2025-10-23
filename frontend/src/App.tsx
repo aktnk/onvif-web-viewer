@@ -223,6 +223,17 @@ function App() {
     fetchCameras();
   };
 
+  const handleCameraDeleted = (deletedCameraId: number) => {
+    // If the deleted camera is the one currently selected, deselect it
+    if (selectedCamera && selectedCamera.id === deletedCameraId) {
+      setSelectedCamera(null);
+      setStreamUrl(null);
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    // Refetch the camera list to remove the deleted one
+    fetchCameras();
+  };
+
   return (
     <>
       <CssBaseline />
@@ -253,6 +264,7 @@ function App() {
             loading={camerasLoading}
             error={camerasError}
             onSelectCamera={handleSelectCamera}
+            onCameraDeleted={handleCameraDeleted}
           />
 
           {selectedCamera && (

@@ -110,6 +110,24 @@ router.put('/:id', async (req, res) => {
     }
 });
 
+// DELETE /api/cameras/:id - Delete a camera
+router.delete('/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const count = await db('cameras').where({ id: Number(id) }).del();
+
+        if (count === 0) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        res.status(204).send(); // 204 No Content
+
+    } catch (error) {
+        console.error(`Error deleting camera ${id}:`, error);
+        res.status(500).json({ error: 'An internal server error occurred while deleting the camera.' });
+    }
+});
+
 
 // POST /api/cameras/:id/stream/start - Start a stream
 router.post('/:id/stream/start', async (req, res) => {
