@@ -93,7 +93,8 @@ const DiscoverCamerasModal: React.FC<DiscoverCamerasModalProps> = ({ open, onClo
       // Success
       setIsAddDialogOpen(false);
       onCameraAdded();
-      onClose(); // Close the discovery modal as well
+      // Remove the added device from the list
+      setDevices(prevDevices => prevDevices.filter(d => d.address !== selectedDevice.address));
     } catch (err: any) {
       console.error('Add camera error:', err);
       const errorMessage = err.response?.data?.message || 'Failed to add camera. Please check credentials.';
