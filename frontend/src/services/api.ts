@@ -109,3 +109,41 @@ export const syncCameraTime = async (id: number): Promise<TimeSyncResult> => {
 export const deleteRecording = async (id: number): Promise<void> => {
   await axios.delete(`${API_URL}/recordings/${id}`);
 };
+
+export interface PTZCapabilities {
+  supported: boolean;
+  capabilities: {
+    hasPanTilt: boolean;
+    hasZoom: boolean;
+  } | null;
+}
+
+export interface PTZMovement {
+  x?: number;
+  y?: number;
+  zoom?: number;
+  timeout?: number;
+}
+
+export interface PTZResult {
+  success: boolean;
+  message: string;
+}
+
+export const checkPTZCapabilities = async (id: number): Promise<PTZCapabilities> => {
+  const response = await axios.get<PTZCapabilities>(`${API_URL}/cameras/${id}/ptz/capabilities`);
+  return response.data;
+};
+
+export const movePTZ = async (id: number, movement: PTZMovement): Promise<PTZResult> => {
+  const response = await axios.post<PTZResult>(`${API_URL}/cameras/${id}/ptz/move`, movement);
+  return response.data;
+};
+
+export const stopPTZ = async (id: number): Promise<PTZResult> => {
+  const response = await axios.post<PTZResult>(`${API_URL}/cameras/${id}/ptz/stop`, {
+    panTilt: true,
+    zoom: true
+  });
+  return response.data;
+};

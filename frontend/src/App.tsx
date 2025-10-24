@@ -5,7 +5,8 @@ import VideoPlayer from './components/VideoPlayer';
 import RecordingList from './components/RecordingList';
 import AddCameraModal from './components/AddCameraModal';
 import DiscoverCamerasModal from './components/DiscoverCamerasModal';
-import { getCameras, startStream, stopStream, startRecording, stopRecording } from './services/api';
+import PTZControls from './components/PTZControls';
+import { getCameras, startStream, stopStream, startRecording, stopRecording, checkPTZCapabilities } from './services/api';
 import type { Camera } from './services/api';
 import './App.css';
 
@@ -64,6 +65,10 @@ function App() {
   const [isLoadingStream, setIsLoadingStream] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording'>('idle');
+
+  // State for PTZ
+  const [hasPTZ, setHasPTZ] = useState<boolean>(false);
+  const [checkingPTZ, setCheckingPTZ] = useState<boolean>(false);
 
   // State for playback modal
   const [isPlaybackModalOpen, setIsPlaybackModalOpen] = useState(false);
@@ -142,6 +147,7 @@ function App() {
   const handleSelectCamera = async (camera: Camera) => {
     setStreamError(null);
     setRecordingStatus('idle'); // Reset recording status on any camera change
+    setHasPTZ(false); // Reset PTZ state
 
     // If a recording is in progress, stop it before changing streams
     if (recordingStatus === 'recording' && selectedCamera) {
@@ -173,6 +179,26 @@ function App() {
 
       setStreamUrl(fullStreamUrl);
       sessionStorage.setItem(SESSION_STORAGE_KEY, String(camera.id));
+
+      // Check PTZ capabilities after stream is ready
+      setCheckingPTZ(true);
+      try {
+        console.log(`Checking PTZ capabilities for camera ${camera.id}...`);
+        const ptzCapabilities = await checkPTZCapabilities(camera.id);
+        console.log('PTZ capabilities response:', ptzCapabilities);
+        setHasPTZ(ptzCapabilities.supported);
+        if (ptzCapabilities.supported) {
+          console.log('PTZ is supported! Showing controls.');
+        } else {
+          console.log('PTZ is not supported for this camera.');
+        }
+      } catch (ptzError: any) {
+        console.error('Failed to check PTZ capabilities:', ptzError);
+        console.error('Error details:', ptzError.response?.data || ptzError.message);
+        setHasPTZ(false);
+      } finally {
+        setCheckingPTZ(false);
+      }
 
     } catch (error) {
       console.error('Failed to start or poll for stream:', error);
@@ -297,6 +323,14 @@ function App() {
                       </Box>
                     )}
                   </Box>
+                  {checkingPTZ ? (
+                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CircularProgress size={20} />
+                      <Typography variant="body2">Checking PTZ capabilities...</Typography>
+                    </Box>
+                  ) : hasPTZ ? (
+                    <PTZControls cameraId={selectedCamera.id} />
+                  ) : null}
                 </>
               ) : null}
             </Box>

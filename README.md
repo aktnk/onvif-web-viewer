@@ -8,6 +8,7 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 *   **Camera Management**: Register, update, delete, and list ONVIF cameras.
 *   **Time Synchronization**: Synchronize camera time with the server's system time via ONVIF protocol. Cameras are automatically synced when registered, and can be manually synced anytime.
 *   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
+*   **PTZ Control**: Control Pan-Tilt-Zoom (PTZ) cameras directly from the web interface with intuitive directional controls and zoom slider. PTZ controls are automatically displayed for cameras that support the feature.
 *   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application. Recordings from deleted cameras remain accessible.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
@@ -141,6 +142,10 @@ Once the application is running, you can manage your cameras through the web int
 *   **Synchronizing Camera Time**: Click the sync icon (⟳) next to any camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors.
 *   **Deleting a Camera**: Click the red delete icon (🗑️) next to a camera in the main list. A confirmation prompt will appear before deletion.
 *   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list to start streaming. The button will change to "Stop Stream" (with a different color) while the stream is active. Click "Stop Stream" to close the stream.
+*   **PTZ Control**: For cameras that support PTZ (Pan-Tilt-Zoom), a control panel will automatically appear below the video player.
+    *   Use the directional arrow buttons (↑ ↓ ← →) to pan and tilt the camera. Press and hold to move; release to stop.
+    *   Use the zoom slider or +/- buttons to zoom in and out. The camera will automatically stop zooming when you release the control.
+    *   All PTZ controls support both mouse and touch input for mobile devices.
 *   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
 *   **Playback & Management**: A list of completed recordings is available at the bottom of the page.
     *   Click the "Play" button to watch a recording. Recordings from deleted cameras will be labeled accordingly and remain playable.
@@ -210,6 +215,64 @@ Synchronizes the specified camera's system time with the server's current time u
 ```
 
 **Note**: The camera's time is synchronized to the server's system time. Ensure the server has accurate time (e.g., via NTP) for proper synchronization.
+
+#### `GET /api/cameras/:id/ptz/capabilities`
+Checks if the specified camera supports PTZ (Pan-Tilt-Zoom) functionality.
+
+**Response Example**:
+```json
+{
+  "supported": true,
+  "capabilities": {
+    "hasPanTilt": true,
+    "hasZoom": true
+  }
+}
+```
+
+If PTZ is not supported, `supported` will be `false` and `capabilities` will be `null`.
+
+#### `POST /api/cameras/:id/ptz/move`
+Moves the camera using continuous PTZ movement. The camera will continue moving in the specified direction until a stop command is sent.
+
+**Request Body**:
+```json
+{
+  "x": 0.5,        // Pan speed: -1.0 (left) to 1.0 (right), 0 = no movement
+  "y": 0.3,        // Tilt speed: -1.0 (down) to 1.0 (up), 0 = no movement
+  "zoom": 0.2,     // Zoom speed: -1.0 (out) to 1.0 (in), 0 = no movement
+  "timeout": 1000  // Optional: auto-stop after N milliseconds
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Camera movement started"
+}
+```
+
+**Note**: Values represent movement speed/direction. Use 0.5 for moderate speed, 1.0 for maximum speed.
+
+#### `POST /api/cameras/:id/ptz/stop`
+Stops all ongoing PTZ movements (pan, tilt, and zoom).
+
+**Request Body** (optional):
+```json
+{
+  "panTilt": true,  // Stop pan/tilt movement (default: true)
+  "zoom": true      // Stop zoom movement (default: true)
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Camera movement stopped"
+}
+```
 
 #### `GET /api/recordings`
 Retrieves a list of all completed recordings, including camera name and file details. Recordings from deleted cameras are included.

@@ -6,6 +6,7 @@ const { startStream, stopStream } = require('../services/streamService');
 const { startRecording, stopRecording } = require('../services/recordingService');
 const { scanSubnet, getLocalSubnet } = require('../services/discoveryService');
 const { getCameraTime, syncCameraTime } = require('../services/timeSyncService');
+const { checkPTZCapability, movePTZ, stopPTZ } = require('../services/ptzService');
 const onvif = require('onvif');
 
 // GET /api/cameras - List all cameras
@@ -225,6 +226,91 @@ router.post('/:id/sync-time', async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error(`Error syncing time for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/cameras/:id/ptz/capabilities - Check PTZ capabilities
+router.get('/:id/ptz/capabilities', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const result = await checkPTZCapability({
+            host: camera.host,
+            port: camera.port,
+            user: camera.user,
+            pass: camera.pass,
+            xaddr: camera.xaddr
+        });
+
+        res.json(result);
+    } catch (error) {
+        console.error(`Error checking PTZ capability for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/cameras/:id/ptz/move - Move camera PTZ
+router.post('/:id/ptz/move', async (req, res) => {
+    const { id } = req.params;
+    const { x, y, zoom, timeout } = req.body;
+
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const result = await movePTZ(
+            {
+                host: camera.host,
+                port: camera.port,
+                user: camera.user,
+                pass: camera.pass,
+                xaddr: camera.xaddr
+            },
+            { x, y, zoom, timeout }
+        );
+
+        res.json(result);
+    } catch (error) {
+        console.error(`Error moving PTZ for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/cameras/:id/ptz/stop - Stop PTZ movement
+router.post('/:id/ptz/stop', async (req, res) => {
+    const { id } = req.params;
+    const { panTilt, zoom } = req.body;
+
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const result = await stopPTZ(
+            {
+                host: camera.host,
+                port: camera.port,
+                user: camera.user,
+                pass: camera.pass,
+                xaddr: camera.xaddr
+            },
+            { panTilt, zoom }
+        );
+
+        res.json(result);
+    } catch (error) {
+        console.error(`Error stopping PTZ for camera ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
