@@ -139,10 +139,12 @@ Once the application is running, you can manage your cameras through the web int
     *   You can add unregistered cameras by providing their credentials. The discovery window will remain open, allowing you to add multiple cameras without re-scanning.
 *   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog for the camera's details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera. After successful registration, the camera's time is automatically synchronized with the server.
 *   **Synchronizing Camera Time**: Click the sync icon (⟳) next to any camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors.
-*   **Deleting a Camera**: Click the delete icon next to a camera in the main list. A confirmation prompt will appear before deletion.
-*   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list.
+*   **Deleting a Camera**: Click the red delete icon (🗑️) next to a camera in the main list. A confirmation prompt will appear before deletion.
+*   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list to start streaming. The button will change to "Stop Stream" (with a different color) while the stream is active. Click "Stop Stream" to close the stream.
 *   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
-*   **Playback**: A list of completed recordings is available at the bottom of the page. Click the "Play" button to watch a recording. Recordings from deleted cameras will be labeled accordingly and remain playable.
+*   **Playback & Management**: A list of completed recordings is available at the bottom of the page.
+    *   Click the "Play" button to watch a recording. Recordings from deleted cameras will be labeled accordingly and remain playable.
+    *   Click the red delete icon (🗑️) to permanently delete a recording. A confirmation prompt will appear before deletion. This will remove both the database record and the MP4 file from the server.
 
 ## API Reference
 
@@ -211,3 +213,12 @@ Synchronizes the specified camera's system time with the server's current time u
 
 #### `GET /api/recordings`
 Retrieves a list of all completed recordings, including camera name and file details. Recordings from deleted cameras are included.
+
+#### `DELETE /api/recordings/:id`
+Deletes a recording by its ID. This removes both the database record and the associated MP4 file from the server's filesystem.
+
+**Response**: Returns `204 No Content` on success.
+
+**Error Handling**:
+- If the recording ID is not found, returns `404 Not Found`
+- If the file cannot be deleted but exists in the database, the database record is still removed to prevent orphaned records

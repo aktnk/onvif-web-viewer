@@ -95,7 +95,12 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, select
                         <SyncIcon />
                       )}
                     </IconButton>
-                    <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(camera.id)}>
+                    <IconButton
+                      edge="end"
+                      aria-label="delete"
+                      onClick={() => handleDelete(camera.id)}
+                      color="error"
+                    >
                       <DeleteIcon />
                     </IconButton>
                   </Stack>
