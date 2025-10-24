@@ -2,6 +2,8 @@
 
 This is a full-stack web application designed to manage and view ONVIF-compliant IP cameras. It consists of a Node.js backend and a React frontend.
 
+![Main Interface](docs/images/main.png)
+
 ## Features
 
 *   **Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
@@ -12,6 +14,39 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 *   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application. Recordings from deleted cameras remain accessible.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
+
+## Screenshots
+
+### Camera Discovery
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/discover_cameras.png" alt="Discover Cameras Button" width="100%" /></td>
+    <td width="50%"><img src="docs/images/discovering_cameras.png" alt="Discovering Cameras" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Start camera discovery</em></td>
+    <td align="center"><em>Scanning network for ONVIF cameras</em></td>
+  </tr>
+</table>
+
+![Discovered Cameras](docs/images/discovered_cameras.png)
+*List of discovered ONVIF cameras on the network with registration status*
+
+### Live Streaming
+
+![Live Streaming](docs/images/live_streaming.png)
+*Real-time HLS video streaming with recording controls and camera information*
+
+### PTZ Control
+
+![PTZ Control](docs/images/ptz_control.png)
+*Pan-Tilt-Zoom controls with directional buttons and zoom slider for PTZ-enabled cameras*
+
+### Recording Playback
+
+![Recording Playback](docs/images/replay_recording_file.png)
+*Browse, play, and manage recorded video files with timestamp and camera information*
 
 ## Technology Stack
 
