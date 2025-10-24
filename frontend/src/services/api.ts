@@ -105,3 +105,7 @@ export const syncCameraTime = async (id: number): Promise<TimeSyncResult> => {
   const response = await axios.post<TimeSyncResult>(`${API_URL}/cameras/${id}/sync-time`);
   return response.data;
 };
+
+export const deleteRecording = async (id: number): Promise<void> => {
+  await axios.delete(`${API_URL}/recordings/${id}`);
+};
