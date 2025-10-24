@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Modal, Box, Typography, TextField, Button, CircularProgress, Alert } from '@mui/material';
-import { addCamera, type NewCamera } from '../services/api';
+import { addCamera, syncCameraTime, type NewCamera } from '../services/api';
 
 const modalStyle = {
   position: 'absolute' as 'absolute',
@@ -28,12 +28,14 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setLoading(true);
+    setLoadingMessage('Testing connection...');
 
     const newCamera: NewCamera = {
       name,
@@ -44,7 +46,20 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
     };
 
     try {
-      await addCamera(newCamera);
+      // Add the camera
+      const addedCamera = await addCamera(newCamera);
+
+      // Synchronize time with server
+      setLoadingMessage('Synchronizing time...');
+      try {
+        await syncCameraTime(addedCamera.id);
+        console.log('Camera time synchronized successfully');
+      } catch (syncErr: any) {
+        console.warn('Failed to sync camera time:', syncErr);
+        // Don't fail the entire operation if time sync fails
+        // The user can manually sync later
+      }
+
       onCameraAdded();
       onClose();
       // Reset form
@@ -59,6 +74,7 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
       setError(message);
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   };
 
@@ -126,6 +142,11 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
           value={pass}
           onChange={(e) => setPass(e.target.value)}
         />
+        {loading && loadingMessage && (
+          <Typography variant="body2" sx={{ mt: 2, textAlign: 'center', color: 'text.secondary' }}>
+            {loadingMessage}
+          </Typography>
+        )}
         <Box sx={{ mt: 2, position: 'relative' }}>
           <Button
             type="submit"

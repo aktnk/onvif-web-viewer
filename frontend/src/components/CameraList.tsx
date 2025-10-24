@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Camera } from '../services/api';
-import { deleteCamera } from '../services/api';
-import { List, ListItem, ListItemText, Button, CircularProgress, Alert, Box, Stack, IconButton } from '@mui/material';
+import { deleteCamera, syncCameraTime } from '../services/api';
+import { List, ListItem, ListItemText, Button, CircularProgress, Alert, Box, Stack, IconButton, Snackbar } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SyncIcon from '@mui/icons-material/Sync';
 
 
 interface CameraListProps {
@@ -14,6 +15,9 @@ interface CameraListProps {
 }
 
 const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSelectCamera, onCameraDeleted }) => {
+  const [syncingCameraId, setSyncingCameraId] = useState<number | null>(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this camera?')) {
@@ -25,6 +29,26 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSele
         alert('Failed to delete camera. See console for details.');
       }
     }
+  };
+
+  const handleSyncTime = async (id: number) => {
+    setSyncingCameraId(id);
+    try {
+      const result = await syncCameraTime(id);
+      setSnackbarMessage(result.message || 'Camera time synchronized successfully');
+      setSnackbarOpen(true);
+    } catch (err: any) {
+      console.error('Failed to sync camera time', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to sync camera time';
+      setSnackbarMessage(`Error: ${errorMessage}`);
+      setSnackbarOpen(true);
+    } finally {
+      setSyncingCameraId(null);
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   if (loading) {
@@ -51,6 +75,19 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSele
                   <Button variant="contained" onClick={() => onSelectCamera(camera)}>
                     View Stream
                   </Button>
+                  <IconButton
+                    edge="end"
+                    aria-label="sync time"
+                    onClick={() => handleSyncTime(camera.id)}
+                    disabled={syncingCameraId === camera.id}
+                    title="Sync camera time with server"
+                  >
+                    {syncingCameraId === camera.id ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      <SyncIcon />
+                    )}
+                  </IconButton>
                   <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(camera.id)}>
                     <DeleteIcon />
                   </IconButton>
@@ -62,6 +99,12 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSele
           ))
         )}
       </List>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        message={snackbarMessage}
+      />
     </Box>
   );
 };

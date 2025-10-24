@@ -83,3 +83,25 @@ export const getRecordings = async (): Promise<Recording[]> => {
 export const deleteCamera = async (id: number): Promise<void> => {
   await axios.delete(`${API_URL}/cameras/${id}`);
 };
+
+export interface CameraTimeInfo {
+  cameraTime: any;
+  serverTime: string;
+}
+
+export const getCameraTime = async (id: number): Promise<CameraTimeInfo> => {
+  const response = await axios.get<CameraTimeInfo>(`${API_URL}/cameras/${id}/time`);
+  return response.data;
+};
+
+export interface TimeSyncResult {
+  success: boolean;
+  beforeTime: any;
+  serverTime: string;
+  message: string;
+}
+
+export const syncCameraTime = async (id: number): Promise<TimeSyncResult> => {
+  const response = await axios.post<TimeSyncResult>(`${API_URL}/cameras/${id}/sync-time`);
+  return response.data;
+};

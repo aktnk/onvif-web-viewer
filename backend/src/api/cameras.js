@@ -5,6 +5,7 @@ const { testConnection } = require('../services/onvifService');
 const { startStream, stopStream } = require('../services/streamService');
 const { startRecording, stopRecording } = require('../services/recordingService');
 const { scanSubnet, getLocalSubnet } = require('../services/discoveryService');
+const { getCameraTime, syncCameraTime } = require('../services/timeSyncService');
 const onvif = require('onvif');
 
 // GET /api/cameras - List all cameras
@@ -174,6 +175,56 @@ router.post('/:id/recording/stop', (req, res) => {
         res.json(result);
     } catch (error) {
         console.error(`Error stopping recording for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/cameras/:id/time - Get camera's current time
+router.get('/:id/time', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const timeInfo = await getCameraTime({
+            host: camera.host,
+            port: camera.port,
+            user: camera.user,
+            pass: camera.pass,
+            xaddr: camera.xaddr
+        });
+
+        res.json(timeInfo);
+    } catch (error) {
+        console.error(`Error getting time for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/cameras/:id/sync-time - Synchronize camera time with server time
+router.post('/:id/sync-time', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const result = await syncCameraTime({
+            host: camera.host,
+            port: camera.port,
+            user: camera.user,
+            pass: camera.pass,
+            xaddr: camera.xaddr
+        });
+
+        res.json(result);
+    } catch (error) {
+        console.error(`Error syncing time for camera ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppBar, Toolbar, Typography, Container, CssBaseline, Box, CircularProgress, Alert, Button, Modal } from '@mui/material';
 import CameraList from './components/CameraList';
 import VideoPlayer from './components/VideoPlayer';
