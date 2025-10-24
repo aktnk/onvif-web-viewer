@@ -6,6 +6,7 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 
 *   **Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
 *   **Camera Management**: Register, update, delete, and list ONVIF cameras.
+*   **Time Synchronization**: Synchronize camera time with the server's system time via ONVIF protocol. Cameras are automatically synced when registered, and can be manually synced anytime.
 *   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
 *   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application. Recordings from deleted cameras remain accessible.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
@@ -133,10 +134,11 @@ The frontend will be running at `http://localhost:5173` and should open automati
 
 Once the application is running, you can manage your cameras through the web interface.
 
-*   **Discovering Cameras**: Click the "Discover Cameras" button to automatically scan your local network. The scan will probe each IP address in your subnet and may take 2-3 minutes. 
+*   **Discovering Cameras**: Click the "Discover Cameras" button to automatically scan your local network. The scan will probe each IP address in your subnet and may take 2-3 minutes.
     *   Discovered cameras that are already registered will be marked as "Registered".
     *   You can add unregistered cameras by providing their credentials. The discovery window will remain open, allowing you to add multiple cameras without re-scanning.
-*   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog for the camera's details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera.
+*   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog for the camera's details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera. After successful registration, the camera's time is automatically synchronized with the server.
+*   **Synchronizing Camera Time**: Click the sync icon (⟳) next to any camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors.
 *   **Deleting a Camera**: Click the delete icon next to a camera in the main list. A confirmation prompt will appear before deletion.
 *   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list.
 *   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
@@ -180,6 +182,32 @@ Starts a new recording for the specified camera. The video is saved as an MP4 fi
 
 #### `POST /api/cameras/:id/recording/stop`
 Stops an in-progress recording and finalizes the MP4 file.
+
+#### `GET /api/cameras/:id/time`
+Retrieves the current date and time from the specified camera via ONVIF, along with the server's current time for comparison.
+
+**Response Example**:
+```json
+{
+  "cameraTime": { /* ONVIF date/time object */ },
+  "serverTime": "2025-01-24T12:00:00.000Z"
+}
+```
+
+#### `POST /api/cameras/:id/sync-time`
+Synchronizes the specified camera's system time with the server's current time using ONVIF's `SetSystemDateAndTime` method. The time is set in UTC format.
+
+**Response Example**:
+```json
+{
+  "success": true,
+  "beforeTime": { /* ONVIF date/time object before sync */ },
+  "serverTime": "2025-01-24T12:00:00.000Z",
+  "message": "Camera time synchronized successfully"
+}
+```
+
+**Note**: The camera's time is synchronized to the server's system time. Ensure the server has accurate time (e.g., via NTP) for proper synchronization.
 
 #### `GET /api/recordings`
 Retrieves a list of all completed recordings, including camera name and file details. Recordings from deleted cameras are included.
