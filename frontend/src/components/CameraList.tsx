@@ -10,11 +10,12 @@ interface CameraListProps {
   cameras: Camera[];
   loading: boolean;
   error: string | null;
+  selectedCamera: Camera | null;
   onSelectCamera: (camera: Camera) => void;
   onCameraDeleted: (id: number) => void; // Callback to refresh the list
 }
 
-const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSelectCamera, onCameraDeleted }) => {
+const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, selectedCamera, onSelectCamera, onCameraDeleted }) => {
   const [syncingCameraId, setSyncingCameraId] = useState<number | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -67,36 +68,43 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, onSele
             <ListItemText primary="No cameras found. Click 'Add Camera' to get started." />
           </ListItem>
         ) : (
-          cameras.map((camera) => (
-            <ListItem
-              key={camera.id}
-              secondaryAction={
-                <Stack direction="row" spacing={1}>
-                  <Button variant="contained" onClick={() => onSelectCamera(camera)}>
-                    View Stream
-                  </Button>
-                  <IconButton
-                    edge="end"
-                    aria-label="sync time"
-                    onClick={() => handleSyncTime(camera.id)}
-                    disabled={syncingCameraId === camera.id}
-                    title="Sync camera time with server"
-                  >
-                    {syncingCameraId === camera.id ? (
-                      <CircularProgress size={24} />
-                    ) : (
-                      <SyncIcon />
-                    )}
-                  </IconButton>
-                  <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(camera.id)}>
-                    <DeleteIcon />
-                  </IconButton>
-                </Stack>
-              }
-            >
-              <ListItemText primary={camera.name} secondary={`Host: ${camera.host}`} />
-            </ListItem>
-          ))
+          cameras.map((camera) => {
+            const isStreaming = selectedCamera?.id === camera.id;
+            return (
+              <ListItem
+                key={camera.id}
+                secondaryAction={
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="contained"
+                      color={isStreaming ? "secondary" : "primary"}
+                      onClick={() => onSelectCamera(camera)}
+                    >
+                      {isStreaming ? 'Stop Stream' : 'View Stream'}
+                    </Button>
+                    <IconButton
+                      edge="end"
+                      aria-label="sync time"
+                      onClick={() => handleSyncTime(camera.id)}
+                      disabled={syncingCameraId === camera.id}
+                      title="Sync camera time with server"
+                    >
+                      {syncingCameraId === camera.id ? (
+                        <CircularProgress size={24} />
+                      ) : (
+                        <SyncIcon />
+                      )}
+                    </IconButton>
+                    <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(camera.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Stack>
+                }
+              >
+                <ListItemText primary={camera.name} secondary={`Host: ${camera.host}`} />
+              </ListItem>
+            );
+          })
         )}
       </List>
       <Snackbar

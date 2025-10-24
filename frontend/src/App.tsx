@@ -263,6 +263,7 @@ function App() {
             cameras={cameras}
             loading={camerasLoading}
             error={camerasError}
+            selectedCamera={selectedCamera}
             onSelectCamera={handleSelectCamera}
             onCameraDeleted={handleCameraDeleted}
           />
