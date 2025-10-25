@@ -88,21 +88,112 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    if (updates.id) {
-        delete updates.id;
+    // Define allowed fields for update (whitelist)
+    const ALLOWED_UPDATE_FIELDS = ['name', 'host', 'port', 'user', 'pass', 'xaddr'];
+    const CONNECTION_FIELDS = ['host', 'port', 'user', 'pass', 'xaddr'];
+
+    // Validate and filter allowed fields
+    const allowedUpdates = {};
+    const invalidFields = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+        if (ALLOWED_UPDATE_FIELDS.includes(key)) {
+            // Type validation for each field
+            switch (key) {
+                case 'name':
+                case 'host':
+                case 'user':
+                case 'pass':
+                case 'xaddr':
+                    if (typeof value !== 'string') {
+                        return res.status(400).json({
+                            error: `Field '${key}' must be a string.`
+                        });
+                    }
+                    // Don't allow empty strings for required fields
+                    if ((key === 'name' || key === 'host') && value.trim() === '') {
+                        return res.status(400).json({
+                            error: `Field '${key}' cannot be empty.`
+                        });
+                    }
+                    allowedUpdates[key] = value;
+                    break;
+
+                case 'port':
+                    const port = Number(value);
+                    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                        return res.status(400).json({
+                            error: 'Port must be an integer between 1 and 65535.'
+                        });
+                    }
+                    allowedUpdates[key] = port;
+                    break;
+
+                default:
+                    // Should not reach here, but handle defensively
+                    invalidFields.push(key);
+            }
+        } else {
+            invalidFields.push(key);
+        }
     }
 
-    if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: 'No update fields provided.' });
+    // Report invalid fields if any
+    if (invalidFields.length > 0) {
+        return res.status(400).json({
+            error: `Invalid or disallowed fields: ${invalidFields.join(', ')}`
+        });
+    }
+
+    // Check if there are any valid updates
+    if (Object.keys(allowedUpdates).length === 0) {
+        return res.status(400).json({ error: 'No valid update fields provided.' });
     }
 
     try {
-        const count = await db('cameras').where({ id: Number(id) }).update(updates);
+        // Fetch the current camera data
+        const currentCamera = await db('cameras').where({ id: Number(id) }).first();
 
-        if (count === 0) {
+        if (!currentCamera) {
             return res.status(404).json({ error: `Camera with ID ${id} not found.` });
         }
 
+        // Check if connection-related fields are being updated
+        const isConnectionUpdate = CONNECTION_FIELDS.some(field =>
+            allowedUpdates.hasOwnProperty(field)
+        );
+
+        if (isConnectionUpdate) {
+            // Merge current camera data with updates to test connection
+            const testConfig = {
+                host: allowedUpdates.host ?? currentCamera.host,
+                port: allowedUpdates.port ?? currentCamera.port,
+                user: allowedUpdates.user ?? currentCamera.user,
+                pass: allowedUpdates.pass ?? currentCamera.pass,
+                xaddr: allowedUpdates.xaddr ?? currentCamera.xaddr
+            };
+
+            // Test the new connection configuration
+            try {
+                await testConnection(testConfig);
+            } catch (error) {
+                console.error('Connection test failed during update:', error);
+                return res.status(400).json({
+                    error: 'Failed to connect to camera with updated credentials.',
+                    details: error.message
+                });
+            }
+        }
+
+        // Perform the update
+        const count = await db('cameras').where({ id: Number(id) }).update(allowedUpdates);
+
+        if (count === 0) {
+            // This should not happen since we already checked, but handle defensively
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        // Fetch and return the updated camera
         const updatedCamera = await db('cameras').where({ id: Number(id) }).first();
         res.json(updatedCamera);
 
