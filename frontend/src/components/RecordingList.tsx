@@ -19,10 +19,10 @@ const RecordingList: React.FC<RecordingListProps> = ({ listVersion, onPlayRecord
 
     const fetchRecordings = async () => {
         try {
-            console.log('[RecordingList] Fetching recordings...');
+            if (import.meta.env.DEV) console.log('[RecordingList] Fetching recordings...');
             setLoading(true);
             const data = await getRecordings();
-            console.log(`[RecordingList] Fetched ${data.length} recordings:`, data);
+            if (import.meta.env.DEV) console.log(`[RecordingList] Fetched ${data.length} recordings:`, data);
             setRecordings(data);
             setError(null);
         } catch (err) {
@@ -34,7 +34,7 @@ const RecordingList: React.FC<RecordingListProps> = ({ listVersion, onPlayRecord
     };
 
     useEffect(() => {
-        console.log(`[RecordingList] useEffect triggered, listVersion: ${listVersion}`);
+        if (import.meta.env.DEV) console.log(`[RecordingList] useEffect triggered, listVersion: ${listVersion}`);
         fetchRecordings();
     }, [listVersion]);
 
