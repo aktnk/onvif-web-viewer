@@ -11,8 +11,8 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 *   **Time Synchronization**: Synchronize camera time with the server's system time via ONVIF protocol. Cameras are automatically synced when registered, and can be manually synced anytime.
 *   **Multi-Camera Live Streaming**: View up to 4 live HLS streams simultaneously in a 2×2 grid layout. Each camera stream operates independently with its own controls.
 *   **PTZ Control**: Control Pan-Tilt-Zoom (PTZ) cameras directly from the web interface with intuitive directional controls and zoom slider. PTZ controls are automatically displayed for cameras that support the feature.
-*   **Independent Recording**: Record video from multiple cameras simultaneously. Each camera has its own recording controls.
-*   **Video Playback**: Play back recorded MP4 files from a list within the application. Recordings from deleted cameras remain accessible.
+*   **Independent Recording**: Record video from multiple cameras simultaneously. Each camera has its own recording controls. Auto-generates thumbnails from recordings.
+*   **Video Playback**: Browse recordings in a 4-column grid with thumbnail previews. Play back recorded MP4 files in a modal player. Recordings from deleted cameras remain accessible.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
 *   **Session Persistence**: Active camera streams are automatically restored after page reload.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
@@ -74,6 +74,16 @@ The project is divided into two main parts:
 -   `/backend`: The Node.js/Express server that handles all camera communication and video processing.
 -   `/frontend`: The React single-page application that provides the user interface.
 
+## Documentation
+
+-   **[DEPLOYMENT.md](DEPLOYMENT.md)** - Comprehensive guide for building and deploying the application
+    -   Development workflow and commands
+    -   Production build process
+    -   Local testing with `npm run preview`
+    -   Deployment instructions for production servers
+    -   Nginx configuration examples
+    -   Troubleshooting common issues
+
 ## Getting Started
 
 ### Prerequisites
@@ -116,6 +126,7 @@ The backend uses [Knex.js](https://knexjs.org/) as a SQL query builder and migra
 - `20251015144534_create_cameras_table.js` - Creates the `cameras` table
 - `20251016140916_add_xaddr_to_cameras.js` - Adds `xaddr` column for custom ONVIF URLs
 - `20251018120100_create_recordings_table.js` - Creates the `recordings` table
+- `20251031131841_add_thumbnail_to_recordings.js` - Adds `thumbnail` column for recording preview images
 
 **Common Knex Commands:**
 
@@ -150,6 +161,7 @@ npx knex migrate:make migration_name
 - `id` (primary key, auto-increment)
 - `camera_id` (integer, foreign key) - Reference to cameras table
 - `filename` (text) - MP4 filename
+- `thumbnail` (text, nullable) - Thumbnail image filename (JPG)
 - `start_time` (datetime) - Recording start timestamp
 - `end_time` (datetime, nullable) - Recording end timestamp
 - `is_finished` (boolean, default: false) - Recording completion status
@@ -165,8 +177,20 @@ npm install
 
 # Run the development server
 npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
-The frontend will be running at `http://localhost:5173` and should open automatically in your browser.
+The frontend development server will be running at `http://localhost:5173` and should open automatically in your browser.
+
+**Frontend Build Commands:**
+- `npm run dev` - Start Vite development server with hot module replacement (HMR)
+- `npm run build` - Build for production (runs TypeScript compiler + Vite build). Output goes to `dist/` directory
+- `npm run lint` - Run ESLint to check code quality
+- `npm run preview` - Preview the production build locally
 
 ## Usage
 
@@ -194,9 +218,13 @@ Once the application is running, you can manage your cameras through the web int
     *   You can record from multiple cameras simultaneously.
     *   The recording status (REC indicator) is displayed for each camera independently.
     *   Recordings are saved as MP4 files on the server.
-*   **Playback & Management**: A list of completed recordings is available at the bottom of the page.
-    *   Click the "Play" button to watch a recording. Recordings from deleted cameras will be labeled accordingly and remain playable.
-    *   Click the red delete icon (🗑️) to permanently delete a recording. A confirmation prompt will appear before deletion. This will remove both the database record and the MP4 file from the server.
+    *   When a recording is stopped, a thumbnail is automatically generated from the video (captured at the 2-second mark).
+    *   New recordings appear immediately in the recordings list after stopping (no page reload required).
+*   **Playback & Management**: Completed recordings are displayed in a 4-column grid layout with thumbnail previews.
+    *   Each recording card shows: thumbnail image, camera name, filename, and start/end timestamps.
+    *   Click the "Play" button to watch a recording in a modal player.
+    *   Recordings from deleted cameras will be labeled accordingly and remain playable.
+    *   Click the red delete icon (🗑️) to permanently delete a recording. A confirmation prompt will appear before deletion. This will remove both the database record, the MP4 file, and the thumbnail from the server.
 
 ## API Reference
 
