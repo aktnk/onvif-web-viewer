@@ -80,7 +80,7 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                       color={isActive ? "secondary" : "primary"}
                       onClick={() => onSelectCamera(camera)}
                     >
-                      {isActive ? 'ストリーム停止' : 'ストリーム表示'}
+                      {isActive ? 'Stop Stream' : 'View Stream'}
                     </Button>
                     <IconButton
                       edge="end"

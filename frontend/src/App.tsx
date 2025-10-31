@@ -183,7 +183,7 @@ function App() {
 
     // Check if we've reached the max cameras limit
     if (activeCameras.size >= MAX_CAMERAS) {
-      alert(`最大${MAX_CAMERAS}台までのカメラしか同時表示できません。`);
+      alert(`Maximum of ${MAX_CAMERAS} cameras can be displayed simultaneously.`);
       return;
     }
 
@@ -449,7 +449,7 @@ function App() {
           {activeCameras.size > 0 && (
             <Box sx={{ mt: 4 }}>
               <Typography variant="h5" component="h2" gutterBottom>
-                ライブストリーム ({activeCameras.size}/{MAX_CAMERAS})
+                Live Streams ({activeCameras.size}/{MAX_CAMERAS})
               </Typography>
               <Box
                 sx={{
@@ -479,7 +479,7 @@ function App() {
                         color="error"
                         onClick={() => handleSelectCamera(cameraState.camera)}
                       >
-                        閉じる
+                        Close
                       </Button>
                     </Box>
 
@@ -500,7 +500,7 @@ function App() {
                               size="small"
                               onClick={() => handleStartRecording(cameraId)}
                             >
-                              録画開始
+                              Start Recording
                             </Button>
                           ) : (
                             <Button
@@ -509,7 +509,7 @@ function App() {
                               size="small"
                               onClick={() => handleStopRecording(cameraId)}
                             >
-                              録画停止
+                              Stop Recording
                             </Button>
                           )}
                           {cameraState.recordingStatus === 'recording' && (
@@ -522,7 +522,7 @@ function App() {
                         {cameraState.checkingPTZ ? (
                           <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <CircularProgress size={16} />
-                            <Typography variant="caption">PTZ機能を確認中...</Typography>
+                            <Typography variant="caption">Checking PTZ capabilities...</Typography>
                           </Box>
                         ) : cameraState.hasPTZ ? (
                           <PTZControls cameraId={cameraId} />
