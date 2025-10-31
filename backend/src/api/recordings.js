@@ -17,6 +17,7 @@ router.get('/', async (req, res) => {
         'recordings.filename',
         'recordings.start_time',
         'recordings.end_time',
+        'recordings.thumbnail',
         db.raw("COALESCE(cameras.name, 'Deleted Camera') as camera_name")
       )
       .where('recordings.is_finished', true)

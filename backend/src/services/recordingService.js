@@ -13,6 +13,57 @@ if (!fs.existsSync(recordingsBasePath)) {
     fs.mkdirSync(recordingsBasePath, { recursive: true });
 }
 
+// Base path for thumbnails output
+const thumbnailsBasePath = path.join(__dirname, '../../thumbnails');
+if (!fs.existsSync(thumbnailsBasePath)) {
+    fs.mkdirSync(thumbnailsBasePath, { recursive: true });
+}
+
+/**
+ * Generates a thumbnail from a video file.
+ * @param {string} videoPath - The path to the video file.
+ * @param {string} thumbnailFilename - The filename for the thumbnail.
+ * @returns {Promise<string>} The thumbnail filename.
+ */
+function generateThumbnail(videoPath, thumbnailFilename) {
+    return new Promise((resolve, reject) => {
+        const thumbnailPath = path.join(thumbnailsBasePath, thumbnailFilename);
+
+        // Extract a frame from 2 seconds into the video
+        const ffmpegArgs = [
+            '-i', videoPath,
+            '-ss', '00:00:02',  // Seek to 2 seconds
+            '-vframes', '1',     // Extract 1 frame
+            '-vf', 'scale=320:-1', // Scale to width 320px, maintain aspect ratio
+            '-q:v', '2',         // Quality (2-5 is good, lower is better)
+            thumbnailPath
+        ];
+
+        console.log(`Generating thumbnail: ffmpeg ${ffmpegArgs.join(' ')}`);
+        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+
+        let stderr = '';
+        ffmpegProcess.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        ffmpegProcess.on('close', (code) => {
+            if (code === 0) {
+                console.log(`Thumbnail generated: ${thumbnailFilename}`);
+                resolve(thumbnailFilename);
+            } else {
+                console.error(`FFmpeg thumbnail generation failed with code ${code}: ${stderr}`);
+                reject(new Error(`Failed to generate thumbnail: exit code ${code}`));
+            }
+        });
+
+        ffmpegProcess.on('error', (err) => {
+            console.error('Failed to spawn FFmpeg for thumbnail:', err);
+            reject(err);
+        });
+    });
+}
+
 // TODO: This function is duplicated in streamService.js. Consider moving to a shared onvifService.
 async function getRtspUrl(camera) {
     return new Promise((resolve, reject) => {
@@ -92,20 +143,45 @@ async function startRecording(cameraId) {
 
     ffmpegProcess.on('close', async (code) => {
         console.log(`FFmpeg recording process for camera ${cameraId} exited with code ${code}`);
+
+        // Get the recording info before deleting (to access stopResolve/stopReject if present)
+        const recordingInfo = activeRecordings.get(cameraId);
         activeRecordings.delete(cameraId);
-        
+
         // A code of 255 is often sent on SIGINT. A code of 0 is a clean exit.
         // Any other code indicates a problem.
         if (code !== 0 && code !== 255) {
             console.error(`FFmpeg process exited with error code ${code}. Deleting recording record.`);
             await db('recordings').where({ id: recording.id }).del();
+
+            // Reject the stopRecording promise if it exists
+            if (recordingInfo?.stopReject) {
+                recordingInfo.stopReject(new Error(`Recording process exited with an error code: ${code}`));
+            }
         } else {
+            // Generate thumbnail
+            let thumbnailFilename = null;
+            try {
+                const thumbnailName = filename.replace('.mp4', '.jpg');
+                thumbnailFilename = await generateThumbnail(outputPath, thumbnailName);
+                console.log(`Thumbnail generated for recording ${filename}: ${thumbnailFilename}`);
+            } catch (err) {
+                console.error(`Failed to generate thumbnail for recording ${filename}:`, err);
+                // Continue without thumbnail - don't fail the recording
+            }
+
             // Update the database record on a clean exit
             await db('recordings').where({ id: recording.id }).update({
                 end_time: new Date(),
                 is_finished: true,
+                thumbnail: thumbnailFilename,
             });
             console.log(`Recording ${filename} marked as finished.`);
+
+            // Resolve the stopRecording promise if it exists
+            if (recordingInfo?.stopResolve) {
+                recordingInfo.stopResolve({ success: true, message: `Recording for camera ${cameraId} stopped and finalized.` });
+            }
         }
     });
 
@@ -126,32 +202,21 @@ async function startRecording(cameraId) {
  */
 function stopRecording(cameraId) {
     return new Promise((resolve, reject) => {
-        if (activeRecordings.has(cameraId)) {
-            const { process, recordingId } = activeRecordings.get(cameraId);
-            console.log(`Stopping recording for camera ${cameraId} (ID: ${recordingId})`);
-
-            // Add a one-time listener for the 'close' event to know when the file is finalized.
-            process.once('close', (code) => {
-                console.log(`Recording process for camera ${cameraId} confirmed closed with code ${code}.`);
-                if (code !== 0 && code !== 255) {
-                    reject(new Error(`Recording process exited with an error code: ${code}`));
-                } else {
-                    // The existing 'close' handler will update the DB. We resolve the promise here.
-                    resolve({ success: true, message: `Recording for camera ${cameraId} stopped and finalized.` });
-                }
-            });
-
-            process.once('error', (err) => {
-                reject(new Error(`Error stopping recording for camera ${cameraId}: ${err.message}`));
-            });
-
-            // Gracefully ask FFmpeg to finalize the file. The 'close' event will fire after this.
-            process.kill('SIGINT');
-            activeRecordings.delete(cameraId); // Remove immediately to prevent duplicate stop commands
-
-        } else {
-            resolve({ success: false, message: `No active recording found for camera ${cameraId}.` });
+        if (!activeRecordings.has(cameraId)) {
+            return resolve({ success: false, message: `No active recording found for camera ${cameraId}.` });
         }
+
+        const { process, recordingId } = activeRecordings.get(cameraId);
+        console.log(`Stopping recording for camera ${cameraId} (ID: ${recordingId})`);
+
+        // Store the resolve/reject functions to be called after processing completes
+        const recordingInfo = activeRecordings.get(cameraId);
+        recordingInfo.stopResolve = resolve;
+        recordingInfo.stopReject = reject;
+
+        // Gracefully ask FFmpeg to finalize the file. The 'close' event will fire after this.
+        process.kill('SIGINT');
+        // Note: We don't delete from activeRecordings here - it will be deleted in the close handler
     });
 }
 
