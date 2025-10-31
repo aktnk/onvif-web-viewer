@@ -17,6 +17,7 @@ app.use(express.json());
 // Serve static files from the "public" directory
 app.use(express.static('public'));
 app.use('/recordings', express.static('recordings'));
+app.use('/thumbnails', express.static('thumbnails'));
 
 // Import and use camera routes
 const cameraRoutes = require('./api/cameras');

@@ -73,6 +73,7 @@ export interface Recording {
   start_time: string;
   end_time: string;
   camera_name: string;
+  thumbnail: string | null;
 }
 
 export const getRecordings = async (): Promise<Recording[]> => {

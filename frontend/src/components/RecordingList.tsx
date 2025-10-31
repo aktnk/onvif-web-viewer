@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getRecordings, deleteRecording, type Recording } from '../services/api';
 import {
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, Button, CircularProgress, Alert, Typography, IconButton, Stack
+    Box, Card, CardMedia, CardContent, CardActions,
+    Button, CircularProgress, Alert, Typography, IconButton
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 interface RecordingListProps {
     listVersion: number;
@@ -55,58 +56,74 @@ const RecordingList: React.FC<RecordingListProps> = ({ listVersion, onPlayRecord
         return <Alert severity="error">{error}</Alert>;
     }
 
+    const BACKEND_URL = 'http://localhost:3001';
+
     return (
-        <>
-            <Typography variant="h4" component="h2" gutterBottom sx={{ mt: 4 }}>
+        <Box sx={{ mt: 4 }}>
+            <Typography variant="h4" component="h2" gutterBottom>
                 Recordings
             </Typography>
-            <TableContainer component={Paper}>
-                <Table sx={{ minWidth: 650 }} aria-label="simple table">
-                    <TableHead>
-                        <TableRow>
-                            <TableCell>Camera</TableCell>
-                            <TableCell>Filename</TableCell>
-                            <TableCell>Start Time</TableCell>
-                            <TableCell>End Time</TableCell>
-                            <TableCell align="right">Actions</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {recordings.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} align="center">
-                                    No recordings found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            recordings.map((rec) => (
-                                <TableRow key={rec.id}>
-                                    <TableCell>{rec.camera_name}</TableCell>
-                                    <TableCell>{rec.filename}</TableCell>
-                                    <TableCell>{new Date(rec.start_time).toLocaleString()}</TableCell>
-                                    <TableCell>{new Date(rec.end_time).toLocaleString()}</TableCell>
-                                    <TableCell align="right">
-                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                            <Button variant="contained" onClick={() => onPlayRecording(rec.filename)}>
-                                                Play
-                                            </Button>
-                                            <IconButton
-                                                edge="end"
-                                                aria-label="delete"
-                                                onClick={() => handleDelete(rec.id, rec.filename)}
-                                                color="error"
-                                            >
-                                                <DeleteIcon />
-                                            </IconButton>
-                                        </Stack>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-        </>
+            {recordings.length === 0 ? (
+                <Alert severity="info">No recordings found.</Alert>
+            ) : (
+                <Box
+                    sx={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: 2,
+                        mt: 2,
+                    }}
+                >
+                    {recordings.map((rec) => (
+                        <Card key={rec.id} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <CardMedia
+                                component="img"
+                                height="180"
+                                image={
+                                    rec.thumbnail
+                                        ? `${BACKEND_URL}/thumbnails/${rec.thumbnail}`
+                                        : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="180"%3E%3Crect fill="%23ddd" width="320" height="180"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="18"%3ENo Thumbnail%3C/text%3E%3C/svg%3E'
+                                }
+                                alt={rec.filename}
+                                sx={{ objectFit: 'cover' }}
+                            />
+                            <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+                                <Typography variant="h6" component="div" noWrap title={rec.camera_name}>
+                                    {rec.camera_name}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" noWrap title={rec.filename}>
+                                    {rec.filename}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    Start: {new Date(rec.start_time).toLocaleString()}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    End: {new Date(rec.end_time).toLocaleString()}
+                                </Typography>
+                            </CardContent>
+                            <CardActions sx={{ justifyContent: 'space-between', pt: 0 }}>
+                                <Button
+                                    size="small"
+                                    variant="contained"
+                                    startIcon={<PlayArrowIcon />}
+                                    onClick={() => onPlayRecording(rec.filename)}
+                                >
+                                    Play
+                                </Button>
+                                <IconButton
+                                    size="small"
+                                    aria-label="delete"
+                                    onClick={() => handleDelete(rec.id, rec.filename)}
+                                    color="error"
+                                >
+                                    <DeleteIcon />
+                                </IconButton>
+                            </CardActions>
+                        </Card>
+                    ))}
+                </Box>
+            )}
+        </Box>
     );
 };
 
