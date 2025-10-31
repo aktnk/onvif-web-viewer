@@ -51,7 +51,19 @@ async function pollForStream(url: string, timeout = 15000, interval = 1000): Pro
   throw new Error(`Timed out after ${timeout / 1000}s waiting for stream to become available.`);
 }
 
-const SESSION_STORAGE_KEY = 'selectedCameraId';
+const SESSION_STORAGE_KEY = 'activeCameraIds';
+const MAX_CAMERAS = 4;
+
+// Type for active camera state
+interface ActiveCameraState {
+  camera: Camera;
+  streamUrl: string | null;
+  isLoadingStream: boolean;
+  streamError: string | null;
+  recordingStatus: 'idle' | 'recording';
+  hasPTZ: boolean;
+  checkingPTZ: boolean;
+}
 
 function App() {
   // State for camera list
@@ -59,16 +71,8 @@ function App() {
   const [camerasLoading, setCamerasLoading] = useState<boolean>(true);
   const [camerasError, setCamerasError] = useState<string | null>(null);
 
-  // State for selected camera and stream
-  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [isLoadingStream, setIsLoadingStream] = useState<boolean>(false);
-  const [streamError, setStreamError] = useState<string | null>(null);
-  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording'>('idle');
-
-  // State for PTZ
-  const [hasPTZ, setHasPTZ] = useState<boolean>(false);
-  const [checkingPTZ, setCheckingPTZ] = useState<boolean>(false);
+  // State for active cameras (up to 4)
+  const [activeCameras, setActiveCameras] = useState<Map<number, ActiveCameraState>>(new Map());
 
   // State for playback modal
   const [isPlaybackModalOpen, setIsPlaybackModalOpen] = useState(false);
@@ -85,25 +89,27 @@ function App() {
 
   const BACKEND_URL = 'http://localhost:3001';
   // Using a ref to give cleanup effects access to the latest state
-  const stateRef = useRef({ selectedCamera, recordingStatus });
+  const stateRef = useRef({ activeCameras });
   useEffect(() => {
-    stateRef.current = { selectedCamera, recordingStatus };
+    stateRef.current = { activeCameras };
   });
 
-  const fetchCameras = useCallback(async (cameraToRestoreId?: number) => {
+  const fetchCameras = useCallback(async (cameraIdsToRestore?: number[]) => {
     try {
       setCamerasLoading(true);
       const camerasData = await getCameras();
       setCameras(camerasData);
       setCamerasError(null);
 
-      if (cameraToRestoreId) {
-        const cameraToRestore = camerasData.find(c => c.id === cameraToRestoreId);
-        if (cameraToRestore) {
-          console.log(`Restoring stream for camera: ${cameraToRestore.name}`);
-          // Use timeout to ensure state updates are processed before starting stream
-          setTimeout(() => handleSelectCamera(cameraToRestore), 0);
-        }
+      if (cameraIdsToRestore && cameraIdsToRestore.length > 0) {
+        cameraIdsToRestore.forEach(cameraId => {
+          const cameraToRestore = camerasData.find(c => c.id === cameraId);
+          if (cameraToRestore) {
+            console.log(`Restoring stream for camera: ${cameraToRestore.name}`);
+            // Use timeout to ensure state updates are processed before starting stream
+            setTimeout(() => handleSelectCamera(cameraToRestore), 0);
+          }
+        });
       }
     } catch (err) {
       setCamerasError('Failed to fetch cameras. Is the backend server running?');
@@ -115,23 +121,24 @@ function App() {
 
   // Fetch cameras on initial load
   useEffect(() => {
-    const savedCameraId = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    fetchCameras(savedCameraId ? parseInt(savedCameraId, 10) : undefined);
+    const savedCameraIds = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    const idsToRestore = savedCameraIds ? JSON.parse(savedCameraIds) : undefined;
+    fetchCameras(idsToRestore);
   }, [fetchCameras]);
 
 
   // Effect to handle cleanup on unmount or page unload
   useEffect(() => {
     const handleCleanup = (isUnloading = false) => {
-      const { selectedCamera: currentCamera, recordingStatus: currentRecordingStatus } = stateRef.current;
-      if (currentCamera) {
-        if (currentRecordingStatus === 'recording') {
-          const stopRecUrl = `${BACKEND_URL}/api/cameras/${currentCamera.id}/recording/stop`;
-          isUnloading ? fetch(stopRecUrl, { method: 'POST', keepalive: true }) : stopRecording(currentCamera.id);
+      const { activeCameras: currentActiveCameras } = stateRef.current;
+      currentActiveCameras.forEach((cameraState, cameraId) => {
+        if (cameraState.recordingStatus === 'recording') {
+          const stopRecUrl = `${BACKEND_URL}/api/cameras/${cameraId}/recording/stop`;
+          isUnloading ? fetch(stopRecUrl, { method: 'POST', keepalive: true }) : stopRecording(cameraId);
         }
-        const stopStreamUrl = `${BACKEND_URL}/api/cameras/${currentCamera.id}/stream/stop`;
-        isUnloading ? fetch(stopStreamUrl, { method: 'POST', keepalive: true }) : stopStream(currentCamera.id);
-      }
+        const stopStreamUrl = `${BACKEND_URL}/api/cameras/${cameraId}/stream/stop`;
+        isUnloading ? fetch(stopStreamUrl, { method: 'POST', keepalive: true }) : stopStream(cameraId);
+      });
     };
 
     const handleBeforeUnload = () => handleCleanup(true);
@@ -145,48 +152,113 @@ function App() {
   }, []); // This effect should only run once on mount and unmount
 
   const handleSelectCamera = async (camera: Camera) => {
-    setStreamError(null);
-    setRecordingStatus('idle'); // Reset recording status on any camera change
-    setHasPTZ(false); // Reset PTZ state
+    const cameraId = camera.id;
 
-    // If a recording is in progress, stop it before changing streams
-    if (recordingStatus === 'recording' && selectedCamera) {
-      await stopRecording(selectedCamera.id);
-    }
+    // Check if camera is already active - if so, remove it
+    if (activeCameras.has(cameraId)) {
+      const cameraState = activeCameras.get(cameraId)!;
 
-    if (selectedCamera && selectedCamera.id !== camera.id) {
-      await stopStream(selectedCamera.id);
-    }
+      // Stop recording if active
+      if (cameraState.recordingStatus === 'recording') {
+        await stopRecording(cameraId);
+      }
 
-    if (selectedCamera && selectedCamera.id === camera.id) {
-      await stopStream(camera.id);
-      setSelectedCamera(null);
-      setStreamUrl(null);
-      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      // Stop stream
+      await stopStream(cameraId);
+
+      // Remove from active cameras
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(cameraId);
+
+        // Update session storage
+        const activeCameraIds = Array.from(newMap.keys());
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(activeCameraIds));
+
+        return newMap;
+      });
+
       return;
     }
 
-    setSelectedCamera(camera);
-    setStreamUrl(null);
-    setIsLoadingStream(true);
+    // Check if we've reached the max cameras limit
+    if (activeCameras.size >= MAX_CAMERAS) {
+      alert(`最大${MAX_CAMERAS}台までのカメラしか同時表示できません。`);
+      return;
+    }
+
+    // Initialize camera state
+    setActiveCameras(prev => {
+      const newMap = new Map(prev);
+      newMap.set(cameraId, {
+        camera,
+        streamUrl: null,
+        isLoadingStream: true,
+        streamError: null,
+        recordingStatus: 'idle',
+        hasPTZ: false,
+        checkingPTZ: false,
+      });
+      return newMap;
+    });
 
     try {
-      const data = await startStream(camera.id);
+      const data = await startStream(cameraId);
       const fullStreamUrl = `${BACKEND_URL}${data.streamUrl}`;
       console.log(`Stream process started. Polling for manifest at: ${fullStreamUrl}`);
 
       await pollForStream(fullStreamUrl);
 
-      setStreamUrl(fullStreamUrl);
-      sessionStorage.setItem(SESSION_STORAGE_KEY, String(camera.id));
+      // Update stream URL
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            streamUrl: fullStreamUrl,
+            isLoadingStream: false,
+          });
+        }
+
+        // Update session storage
+        const activeCameraIds = Array.from(newMap.keys());
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(activeCameraIds));
+
+        return newMap;
+      });
 
       // Check PTZ capabilities after stream is ready
-      setCheckingPTZ(true);
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            checkingPTZ: true,
+          });
+        }
+        return newMap;
+      });
+
       try {
-        console.log(`Checking PTZ capabilities for camera ${camera.id}...`);
-        const ptzCapabilities = await checkPTZCapabilities(camera.id);
+        console.log(`Checking PTZ capabilities for camera ${cameraId}...`);
+        const ptzCapabilities = await checkPTZCapabilities(cameraId);
         console.log('PTZ capabilities response:', ptzCapabilities);
-        setHasPTZ(ptzCapabilities.supported);
+
+        setActiveCameras(prev => {
+          const newMap = new Map(prev);
+          const cameraState = newMap.get(cameraId);
+          if (cameraState) {
+            newMap.set(cameraId, {
+              ...cameraState,
+              hasPTZ: ptzCapabilities.supported,
+              checkingPTZ: false,
+            });
+          }
+          return newMap;
+        });
+
         if (ptzCapabilities.supported) {
           console.log('PTZ is supported! Showing controls.');
         } else {
@@ -195,42 +267,103 @@ function App() {
       } catch (ptzError: any) {
         console.error('Failed to check PTZ capabilities:', ptzError);
         console.error('Error details:', ptzError.response?.data || ptzError.message);
-        setHasPTZ(false);
-      } finally {
-        setCheckingPTZ(false);
+
+        setActiveCameras(prev => {
+          const newMap = new Map(prev);
+          const cameraState = newMap.get(cameraId);
+          if (cameraState) {
+            newMap.set(cameraId, {
+              ...cameraState,
+              hasPTZ: false,
+              checkingPTZ: false,
+            });
+          }
+          return newMap;
+        });
       }
 
     } catch (error) {
       console.error('Failed to start or poll for stream:', error);
       const errorMessage = error instanceof Error ? error.message : 'Please check the backend logs.';
-      setStreamError(`Failed to start stream. ${errorMessage}`);
-      setSelectedCamera(null);
-      sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    } finally {
-      setIsLoadingStream(false);
+
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            streamError: `Failed to start stream. ${errorMessage}`,
+            isLoadingStream: false,
+          });
+        }
+        return newMap;
+      });
     }
   };
 
-  const handleStartRecording = async () => {
-    if (!selectedCamera) return;
+  const handleStartRecording = async (cameraId: number) => {
     try {
-      await startRecording(selectedCamera.id);
-      setRecordingStatus('recording');
+      await startRecording(cameraId);
+
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            recordingStatus: 'recording',
+          });
+        }
+        return newMap;
+      });
     } catch (error) {
       console.error('Failed to start recording:', error);
-      setStreamError('Failed to start recording.'); // Reuse stream error state for simplicity
+
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            streamError: 'Failed to start recording.',
+          });
+        }
+        return newMap;
+      });
     }
   };
 
-  const handleStopRecording = async () => {
-    if (!selectedCamera) return;
+  const handleStopRecording = async (cameraId: number) => {
     try {
-      await stopRecording(selectedCamera.id);
-      setRecordingStatus('idle');
+      await stopRecording(cameraId);
+
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            recordingStatus: 'idle',
+          });
+        }
+        return newMap;
+      });
+
       setRecordingListVersion(v => v + 1); // Trigger list refresh
     } catch (error) {
       console.error('Failed to stop recording:', error);
-      setStreamError('Failed to stop recording.');
+
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        const cameraState = newMap.get(cameraId);
+        if (cameraState) {
+          newMap.set(cameraId, {
+            ...cameraState,
+            streamError: 'Failed to stop recording.',
+          });
+        }
+        return newMap;
+      });
     }
   };
   const handlePlayRecording = (filename: string) => {
@@ -249,13 +382,32 @@ function App() {
     fetchCameras();
   };
 
-  const handleCameraDeleted = (deletedCameraId: number) => {
-    // If the deleted camera is the one currently selected, deselect it
-    if (selectedCamera && selectedCamera.id === deletedCameraId) {
-      setSelectedCamera(null);
-      setStreamUrl(null);
-      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  const handleCameraDeleted = async (deletedCameraId: number) => {
+    // If the deleted camera is currently active, deselect it
+    if (activeCameras.has(deletedCameraId)) {
+      const cameraState = activeCameras.get(deletedCameraId)!;
+
+      // Stop recording if active
+      if (cameraState.recordingStatus === 'recording') {
+        await stopRecording(deletedCameraId);
+      }
+
+      // Stop stream
+      await stopStream(deletedCameraId);
+
+      // Remove from active cameras
+      setActiveCameras(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(deletedCameraId);
+
+        // Update session storage
+        const activeCameraIds = Array.from(newMap.keys());
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(activeCameraIds));
+
+        return newMap;
+      });
     }
+
     // Refetch the camera list to remove the deleted one
     fetchCameras();
   };
@@ -289,50 +441,97 @@ function App() {
             cameras={cameras}
             loading={camerasLoading}
             error={camerasError}
-            selectedCamera={selectedCamera}
+            activeCameraIds={Array.from(activeCameras.keys())}
             onSelectCamera={handleSelectCamera}
             onCameraDeleted={handleCameraDeleted}
           />
 
-          {selectedCamera && (
-            <Box sx={{ mt: 4, p: 2, border: '1px solid grey', borderRadius: '4px' }}>
+          {activeCameras.size > 0 && (
+            <Box sx={{ mt: 4 }}>
               <Typography variant="h5" component="h2" gutterBottom>
-                Live Stream: {selectedCamera.name}
+                ライブストリーム ({activeCameras.size}/{MAX_CAMERAS})
               </Typography>
-              {isLoadingStream ? (
-                <CircularProgress />
-              ) : streamError ? (
-                <Alert severity="error">{streamError}</Alert>
-              ) : streamUrl ? (
-                <>
-                  <VideoPlayer streamUrl={streamUrl} />
-                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {recordingStatus === 'idle' ? (
-                      <Button variant="contained" color="primary" onClick={handleStartRecording}>
-                        Start Recording
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: 2,
+                  mt: 2,
+                }}
+              >
+                {Array.from(activeCameras.entries()).map(([cameraId, cameraState]) => (
+                  <Box
+                    key={cameraId}
+                    sx={{
+                      p: 2,
+                      border: '1px solid grey',
+                      borderRadius: '4px',
+                      backgroundColor: 'background.paper',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" component="h3">
+                        {cameraState.camera.name}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        onClick={() => handleSelectCamera(cameraState.camera)}
+                      >
+                        閉じる
                       </Button>
-                    ) : (
-                      <Button variant="contained" color="secondary" onClick={handleStopRecording}>
-                        Stop Recording
-                      </Button>
-                    )}
-                    {recordingStatus === 'recording' && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CircularProgress size={20} color="secondary" />
-                        <Typography variant="body1" color="secondary">REC</Typography>
-                      </Box>
-                    )}
-                  </Box>
-                  {checkingPTZ ? (
-                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <CircularProgress size={20} />
-                      <Typography variant="body2">Checking PTZ capabilities...</Typography>
                     </Box>
-                  ) : hasPTZ ? (
-                    <PTZControls cameraId={selectedCamera.id} />
-                  ) : null}
-                </>
-              ) : null}
+
+                    {cameraState.isLoadingStream ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : cameraState.streamError ? (
+                      <Alert severity="error">{cameraState.streamError}</Alert>
+                    ) : cameraState.streamUrl ? (
+                      <>
+                        <VideoPlayer streamUrl={cameraState.streamUrl} />
+                        <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                          {cameraState.recordingStatus === 'idle' ? (
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              size="small"
+                              onClick={() => handleStartRecording(cameraId)}
+                            >
+                              録画開始
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="contained"
+                              color="secondary"
+                              size="small"
+                              onClick={() => handleStopRecording(cameraId)}
+                            >
+                              録画停止
+                            </Button>
+                          )}
+                          {cameraState.recordingStatus === 'recording' && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CircularProgress size={16} color="secondary" />
+                              <Typography variant="body2" color="secondary">REC</Typography>
+                            </Box>
+                          )}
+                        </Box>
+                        {cameraState.checkingPTZ ? (
+                          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CircularProgress size={16} />
+                            <Typography variant="caption">PTZ機能を確認中...</Typography>
+                          </Box>
+                        ) : cameraState.hasPTZ ? (
+                          <PTZControls cameraId={cameraId} />
+                        ) : null}
+                      </>
+                    ) : null}
+                  </Box>
+                ))}
+              </Box>
             </Box>
           )}
 

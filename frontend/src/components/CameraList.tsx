@@ -10,12 +10,12 @@ interface CameraListProps {
   cameras: Camera[];
   loading: boolean;
   error: string | null;
-  selectedCamera: Camera | null;
+  activeCameraIds: number[];
   onSelectCamera: (camera: Camera) => void;
   onCameraDeleted: (id: number) => void; // Callback to refresh the list
 }
 
-const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, selectedCamera, onSelectCamera, onCameraDeleted }) => {
+const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, activeCameraIds, onSelectCamera, onCameraDeleted }) => {
   const [syncingCameraId, setSyncingCameraId] = useState<number | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -69,7 +69,7 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, select
           </ListItem>
         ) : (
           cameras.map((camera) => {
-            const isStreaming = selectedCamera?.id === camera.id;
+            const isActive = activeCameraIds.includes(camera.id);
             return (
               <ListItem
                 key={camera.id}
@@ -77,10 +77,10 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, select
                   <Stack direction="row" spacing={1}>
                     <Button
                       variant="contained"
-                      color={isStreaming ? "secondary" : "primary"}
+                      color={isActive ? "secondary" : "primary"}
                       onClick={() => onSelectCamera(camera)}
                     >
-                      {isStreaming ? 'Stop Stream' : 'View Stream'}
+                      {isActive ? 'ストリーム停止' : 'ストリーム表示'}
                     </Button>
                     <IconButton
                       edge="end"
