@@ -37,6 +37,7 @@ coverage
 # AI prompt files
 prompt*.txt
 GEMINI.md
+/.serena
 
 # Frontend (Vite + React)
 /frontend/dist
@@ -48,6 +49,8 @@ GEMINI.md
 # Backend
 /backend/public
 /backend/recordings
+/backend/thumbnails
 
 # no need file
 test*.sh
+/bak
