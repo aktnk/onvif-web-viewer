@@ -9,10 +9,12 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 *   **Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
 *   **Camera Management**: Register, update, delete, and list ONVIF cameras.
 *   **Time Synchronization**: Synchronize camera time with the server's system time via ONVIF protocol. Cameras are automatically synced when registered, and can be manually synced anytime.
-*   **Live Video Streaming**: View a live HLS stream from any registered camera directly in the web browser.
+*   **Multi-Camera Live Streaming**: View up to 4 live HLS streams simultaneously in a 2×2 grid layout. Each camera stream operates independently with its own controls.
 *   **PTZ Control**: Control Pan-Tilt-Zoom (PTZ) cameras directly from the web interface with intuitive directional controls and zoom slider. PTZ controls are automatically displayed for cameras that support the feature.
-*   **Video Recording & Playback**: Record live video streams as MP4 files on the server and play them back from a list within the application. Recordings from deleted cameras remain accessible.
+*   **Independent Recording**: Record video from multiple cameras simultaneously. Each camera has its own recording controls.
+*   **Video Playback**: Play back recorded MP4 files from a list within the application. Recordings from deleted cameras remain accessible.
 *   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
+*   **Session Persistence**: Active camera streams are automatically restored after page reload.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
 
 ## Screenshots
@@ -36,7 +38,7 @@ This is a full-stack web application designed to manage and view ONVIF-compliant
 ### Live Streaming
 
 ![Live Streaming](docs/images/live_streaming.png)
-*Real-time HLS video streaming with recording controls and camera information*
+*Multi-camera live streaming in 2×2 grid layout - view up to 4 cameras simultaneously with independent controls for each stream*
 
 ### PTZ Control
 
@@ -176,12 +178,22 @@ Once the application is running, you can manage your cameras through the web int
 *   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog for the camera's details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera. After successful registration, the camera's time is automatically synchronized with the server.
 *   **Synchronizing Camera Time**: Click the sync icon (⟳) next to any camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors.
 *   **Deleting a Camera**: Click the red delete icon (🗑️) next to a camera in the main list. A confirmation prompt will appear before deletion.
-*   **Viewing a Stream**: Click the "View Stream" button next to a camera in the list to start streaming. The button will change to "Stop Stream" (with a different color) while the stream is active. Click "Stop Stream" to close the stream.
-*   **PTZ Control**: For cameras that support PTZ (Pan-Tilt-Zoom), a control panel will automatically appear below the video player.
+*   **Viewing Multiple Streams**:
+    *   Click the "View Stream" button next to a camera to add it to the grid view.
+    *   You can view up to 4 cameras simultaneously in a 2×2 grid layout.
+    *   Each camera stream has its own controls and operates independently.
+    *   Click "Stop Stream" in the camera list or the "Close" button in the grid to remove a camera from view.
+    *   If you try to add a 5th camera, you'll receive an alert indicating the maximum limit has been reached.
+    *   Active streams are saved in session storage and will be automatically restored when you refresh the page.
+*   **PTZ Control**: For cameras that support PTZ (Pan-Tilt-Zoom), a control panel will automatically appear below the video player for each camera.
     *   Use the directional arrow buttons (↑ ↓ ← →) to pan and tilt the camera. Press and hold to move; release to stop.
     *   Use the zoom slider or +/- buttons to zoom in and out. The camera will automatically stop zooming when you release the control.
     *   All PTZ controls support both mouse and touch input for mobile devices.
-*   **Recording**: While viewing a stream, use the "Start Recording" and "Stop Recording" buttons to create MP4 recordings on the server.
+    *   Each camera's PTZ controls operate independently.
+*   **Recording**: Each camera stream has its own "Start Recording" and "Stop Recording" buttons.
+    *   You can record from multiple cameras simultaneously.
+    *   The recording status (REC indicator) is displayed for each camera independently.
+    *   Recordings are saved as MP4 files on the server.
 *   **Playback & Management**: A list of completed recordings is available at the bottom of the page.
     *   Click the "Play" button to watch a recording. Recordings from deleted cameras will be labeled accordingly and remain playable.
     *   Click the red delete icon (🗑️) to permanently delete a recording. A confirmation prompt will appear before deletion. This will remove both the database record and the MP4 file from the server.
