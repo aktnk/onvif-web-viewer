@@ -19,19 +19,22 @@ const RecordingList: React.FC<RecordingListProps> = ({ listVersion, onPlayRecord
 
     const fetchRecordings = async () => {
         try {
+            console.log('[RecordingList] Fetching recordings...');
             setLoading(true);
             const data = await getRecordings();
+            console.log(`[RecordingList] Fetched ${data.length} recordings:`, data);
             setRecordings(data);
             setError(null);
         } catch (err) {
             setError('Failed to fetch recordings.');
-            console.error(err);
+            console.error('[RecordingList] Error fetching recordings:', err);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
+        console.log(`[RecordingList] useEffect triggered, listVersion: ${listVersion}`);
         fetchRecordings();
     }, [listVersion]);
 

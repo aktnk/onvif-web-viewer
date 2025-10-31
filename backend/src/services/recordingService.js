@@ -143,6 +143,9 @@ async function startRecording(cameraId) {
 
     ffmpegProcess.on('close', async (code) => {
         console.log(`FFmpeg recording process for camera ${cameraId} exited with code ${code}`);
+
+        // Get the recording info before deleting (to access stopResolve/stopReject if present)
+        const recordingInfo = activeRecordings.get(cameraId);
         activeRecordings.delete(cameraId);
 
         // A code of 255 is often sent on SIGINT. A code of 0 is a clean exit.
@@ -150,6 +153,11 @@ async function startRecording(cameraId) {
         if (code !== 0 && code !== 255) {
             console.error(`FFmpeg process exited with error code ${code}. Deleting recording record.`);
             await db('recordings').where({ id: recording.id }).del();
+
+            // Reject the stopRecording promise if it exists
+            if (recordingInfo?.stopReject) {
+                recordingInfo.stopReject(new Error(`Recording process exited with an error code: ${code}`));
+            }
         } else {
             // Generate thumbnail
             let thumbnailFilename = null;
@@ -169,6 +177,11 @@ async function startRecording(cameraId) {
                 thumbnail: thumbnailFilename,
             });
             console.log(`Recording ${filename} marked as finished.`);
+
+            // Resolve the stopRecording promise if it exists
+            if (recordingInfo?.stopResolve) {
+                recordingInfo.stopResolve({ success: true, message: `Recording for camera ${cameraId} stopped and finalized.` });
+            }
         }
     });
 
@@ -189,32 +202,21 @@ async function startRecording(cameraId) {
  */
 function stopRecording(cameraId) {
     return new Promise((resolve, reject) => {
-        if (activeRecordings.has(cameraId)) {
-            const { process, recordingId } = activeRecordings.get(cameraId);
-            console.log(`Stopping recording for camera ${cameraId} (ID: ${recordingId})`);
-
-            // Add a one-time listener for the 'close' event to know when the file is finalized.
-            process.once('close', (code) => {
-                console.log(`Recording process for camera ${cameraId} confirmed closed with code ${code}.`);
-                if (code !== 0 && code !== 255) {
-                    reject(new Error(`Recording process exited with an error code: ${code}`));
-                } else {
-                    // The existing 'close' handler will update the DB. We resolve the promise here.
-                    resolve({ success: true, message: `Recording for camera ${cameraId} stopped and finalized.` });
-                }
-            });
-
-            process.once('error', (err) => {
-                reject(new Error(`Error stopping recording for camera ${cameraId}: ${err.message}`));
-            });
-
-            // Gracefully ask FFmpeg to finalize the file. The 'close' event will fire after this.
-            process.kill('SIGINT');
-            activeRecordings.delete(cameraId); // Remove immediately to prevent duplicate stop commands
-
-        } else {
-            resolve({ success: false, message: `No active recording found for camera ${cameraId}.` });
+        if (!activeRecordings.has(cameraId)) {
+            return resolve({ success: false, message: `No active recording found for camera ${cameraId}.` });
         }
+
+        const { process, recordingId } = activeRecordings.get(cameraId);
+        console.log(`Stopping recording for camera ${cameraId} (ID: ${recordingId})`);
+
+        // Store the resolve/reject functions to be called after processing completes
+        const recordingInfo = activeRecordings.get(cameraId);
+        recordingInfo.stopResolve = resolve;
+        recordingInfo.stopReject = reject;
+
+        // Gracefully ask FFmpeg to finalize the file. The 'close' event will fire after this.
+        process.kill('SIGINT');
+        // Note: We don't delete from activeRecordings here - it will be deleted in the close handler
     });
 }
 

@@ -335,7 +335,9 @@ function App() {
 
   const handleStopRecording = async (cameraId: number) => {
     try {
+      console.log(`[App] Stopping recording for camera ${cameraId}...`);
       await stopRecording(cameraId);
+      console.log(`[App] Recording stopped for camera ${cameraId}`);
 
       setActiveCameras(prev => {
         const newMap = new Map(prev);
@@ -349,7 +351,12 @@ function App() {
         return newMap;
       });
 
-      setRecordingListVersion(v => v + 1); // Trigger list refresh
+      console.log(`[App] Triggering recording list refresh...`);
+      setRecordingListVersion(v => {
+        const newVersion = v + 1;
+        console.log(`[App] Recording list version updated: ${v} -> ${newVersion}`);
+        return newVersion;
+      });
     } catch (error) {
       console.error('Failed to stop recording:', error);
 
