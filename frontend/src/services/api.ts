@@ -6,9 +6,16 @@ const API_URL = 'http://localhost:3001/api';
 export interface Camera {
   id: number;
   name: string;
-  host: string;
-  port: number;
-  xaddr: string | null;
+  type: 'onvif' | 'uvc';
+
+  // ONVIF-specific fields (present when type='onvif')
+  host?: string;
+  port?: number;
+  xaddr?: string | null;
+
+  // UVC-specific fields (present when type='uvc')
+  device_path?: string;
+
   // We don't need user/pass on the frontend
 }
 
@@ -17,13 +24,21 @@ export const getCameras = async (): Promise<Camera[]> => {
   return response.data;
 };
 
-export type NewCamera = {
-  name: string;
-  host: string;
-  port: number;
-  user: string;
-  pass: string;
-};
+export type NewCamera =
+  | {
+      type: 'onvif';
+      name: string;
+      host: string;
+      port: number;
+      user: string;
+      pass: string;
+      xaddr?: string;
+    }
+  | {
+      type: 'uvc';
+      name: string;
+      device_path: string;
+    };
 
 export const addCamera = async (camera: NewCamera): Promise<Camera> => {
     const response = await axios.post<Camera>(`${API_URL}/cameras`, camera);
@@ -45,6 +60,17 @@ export const discoverCameras = async (): Promise<DiscoveredDevice[]> => {
     timeout: 180000 // 3 minutes
   });
   return response.data.devices;
+};
+
+export interface UVCDevice {
+  device_path: string;
+  name: string;
+  type: 'uvc';
+}
+
+export const discoverUVCCameras = async (): Promise<{ devices: UVCDevice[] }> => {
+  const response = await axios.get<{ devices: UVCDevice[] }>(`${API_URL}/cameras/uvc/discover`);
+  return response.data;
 };
 
 export const startStream = async (id: number): Promise<{ streamUrl: string }> => {
@@ -146,5 +172,20 @@ export const stopPTZ = async (id: number): Promise<PTZResult> => {
     panTilt: true,
     zoom: true
   });
+  return response.data;
+};
+
+export interface CameraCapabilities {
+  streaming: boolean;
+  recording: boolean;
+  thumbnails: boolean;
+  ptz: boolean;
+  discovery: boolean;
+  timeSync: boolean;
+  remoteAccess: boolean;
+}
+
+export const getCameraCapabilities = async (id: number): Promise<CameraCapabilities> => {
+  const response = await axios.get<CameraCapabilities>(`${API_URL}/cameras/${id}/capabilities`);
   return response.data;
 };

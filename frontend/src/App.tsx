@@ -6,8 +6,8 @@ import RecordingList from './components/RecordingList';
 import AddCameraModal from './components/AddCameraModal';
 import DiscoverCamerasModal from './components/DiscoverCamerasModal';
 import PTZControls from './components/PTZControls';
-import { getCameras, startStream, stopStream, startRecording, stopRecording, checkPTZCapabilities } from './services/api';
-import type { Camera } from './services/api';
+import { getCameras, startStream, stopStream, startRecording, stopRecording, getCameraCapabilities } from './services/api';
+import type { Camera, CameraCapabilities } from './services/api';
 import './App.css';
 
 // Style for the modal
@@ -33,7 +33,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  * @param interval The time in ms between poll attempts.
  * @returns A promise that resolves when the URL is accessible.
  */
-async function pollForStream(url: string, timeout = 15000, interval = 1000): Promise<void> {
+async function pollForStream(url: string, timeout = 30000, interval = 1000): Promise<void> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeout) {
     try {
@@ -61,8 +61,8 @@ interface ActiveCameraState {
   isLoadingStream: boolean;
   streamError: string | null;
   recordingStatus: 'idle' | 'recording';
-  hasPTZ: boolean;
-  checkingPTZ: boolean;
+  capabilities: CameraCapabilities | null;
+  checkingCapabilities: boolean;
 }
 
 function App() {
@@ -196,8 +196,8 @@ function App() {
         isLoadingStream: true,
         streamError: null,
         recordingStatus: 'idle',
-        hasPTZ: false,
-        checkingPTZ: false,
+        capabilities: null,
+        checkingCapabilities: false,
       });
       return newMap;
     });
@@ -228,23 +228,23 @@ function App() {
         return newMap;
       });
 
-      // Check PTZ capabilities after stream is ready
+      // Check camera capabilities after stream is ready
       setActiveCameras(prev => {
         const newMap = new Map(prev);
         const cameraState = newMap.get(cameraId);
         if (cameraState) {
           newMap.set(cameraId, {
             ...cameraState,
-            checkingPTZ: true,
+            checkingCapabilities: true,
           });
         }
         return newMap;
       });
 
       try {
-        console.log(`Checking PTZ capabilities for camera ${cameraId}...`);
-        const ptzCapabilities = await checkPTZCapabilities(cameraId);
-        console.log('PTZ capabilities response:', ptzCapabilities);
+        if (import.meta.env.DEV) console.log(`Checking capabilities for camera ${cameraId}...`);
+        const capabilities = await getCameraCapabilities(cameraId);
+        if (import.meta.env.DEV) console.log('Camera capabilities:', capabilities);
 
         setActiveCameras(prev => {
           const newMap = new Map(prev);
@@ -252,21 +252,19 @@ function App() {
           if (cameraState) {
             newMap.set(cameraId, {
               ...cameraState,
-              hasPTZ: ptzCapabilities.supported,
-              checkingPTZ: false,
+              capabilities,
+              checkingCapabilities: false,
             });
           }
           return newMap;
         });
 
-        if (ptzCapabilities.supported) {
+        if (import.meta.env.DEV && capabilities.ptz) {
           console.log('PTZ is supported! Showing controls.');
-        } else {
-          console.log('PTZ is not supported for this camera.');
         }
-      } catch (ptzError: any) {
-        console.error('Failed to check PTZ capabilities:', ptzError);
-        console.error('Error details:', ptzError.response?.data || ptzError.message);
+      } catch (capError: any) {
+        console.error('Failed to check capabilities:', capError);
+        console.error('Error details:', capError.response?.data || capError.message);
 
         setActiveCameras(prev => {
           const newMap = new Map(prev);
@@ -274,8 +272,8 @@ function App() {
           if (cameraState) {
             newMap.set(cameraId, {
               ...cameraState,
-              hasPTZ: false,
-              checkingPTZ: false,
+              capabilities: null,
+              checkingCapabilities: false,
             });
           }
           return newMap;
@@ -526,12 +524,12 @@ function App() {
                             </Box>
                           )}
                         </Box>
-                        {cameraState.checkingPTZ ? (
+                        {cameraState.checkingCapabilities ? (
                           <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <CircularProgress size={16} />
-                            <Typography variant="caption">Checking PTZ capabilities...</Typography>
+                            <Typography variant="caption">Checking camera capabilities...</Typography>
                           </Box>
-                        ) : cameraState.hasPTZ ? (
+                        ) : cameraState.capabilities?.ptz ? (
                           <PTZControls cameraId={cameraId} />
                         ) : null}
                       </>

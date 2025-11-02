@@ -1,8 +1,9 @@
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { Cam } = require('onvif');
 const db = require('../db/db');
+const ONVIFRecordingStrategy = require('./recording/ONVIFRecordingStrategy');
+const UVCRecordingStrategy = require('./recording/UVCRecordingStrategy');
+const { isStreaming } = require('./streamService');
 
 // In-memory store for active FFmpeg recording processes: Map<cameraId, { process: ChildProcess, recordingId: number }>
 const activeRecordings = new Map();
@@ -20,76 +21,19 @@ if (!fs.existsSync(thumbnailsBasePath)) {
 }
 
 /**
- * Generates a thumbnail from a video file.
- * @param {string} videoPath - The path to the video file.
- * @param {string} thumbnailFilename - The filename for the thumbnail.
- * @returns {Promise<string>} The thumbnail filename.
+ * Factory function to get the appropriate recording strategy based on camera type.
+ * @param {Object} camera - Camera object from database
+ * @returns {BaseRecordingStrategy} Recording strategy instance
  */
-function generateThumbnail(videoPath, thumbnailFilename) {
-    return new Promise((resolve, reject) => {
-        const thumbnailPath = path.join(thumbnailsBasePath, thumbnailFilename);
-
-        // Extract a frame from 2 seconds into the video
-        const ffmpegArgs = [
-            '-i', videoPath,
-            '-ss', '00:00:02',  // Seek to 2 seconds
-            '-vframes', '1',     // Extract 1 frame
-            '-vf', 'scale=320:-1', // Scale to width 320px, maintain aspect ratio
-            '-q:v', '2',         // Quality (2-5 is good, lower is better)
-            thumbnailPath
-        ];
-
-        console.log(`Generating thumbnail: ffmpeg ${ffmpegArgs.join(' ')}`);
-        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
-
-        let stderr = '';
-        ffmpegProcess.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        ffmpegProcess.on('close', (code) => {
-            if (code === 0) {
-                console.log(`Thumbnail generated: ${thumbnailFilename}`);
-                resolve(thumbnailFilename);
-            } else {
-                console.error(`FFmpeg thumbnail generation failed with code ${code}: ${stderr}`);
-                reject(new Error(`Failed to generate thumbnail: exit code ${code}`));
-            }
-        });
-
-        ffmpegProcess.on('error', (err) => {
-            console.error('Failed to spawn FFmpeg for thumbnail:', err);
-            reject(err);
-        });
-    });
-}
-
-// TODO: This function is duplicated in streamService.js. Consider moving to a shared onvifService.
-async function getRtspUrl(camera) {
-    return new Promise((resolve, reject) => {
-        console.log(`[onvif] Connecting to camera for recording: ${camera.host}:${camera.port || 80}`);
-        const cam = new Cam({
-            hostname: camera.host,
-            username: camera.user,
-            password: camera.pass,
-            port: camera.port || 80,
-            timeout: 10000
-        }, function(err) {
-            if (err) {
-                console.error('[onvif] Connection Error:', err);
-                return reject(new Error(`[onvif] Connection failed: ${err.message}`));
-            }
-            this.getStreamUri({ protocol: 'RTSP' }, (err, stream) => {
-                if (err) {
-                    return reject(new Error(`[onvif] Could not get stream URI: ${err.message}`));
-                }
-                if (!stream || !stream.uri) {
-                    return reject(new Error('[onvif] Stream URI is empty in the response.'));
-                }
-                resolve(stream.uri);
-            });
-        });
-    });
+function getRecordingStrategy(camera) {
+  switch (camera.type) {
+    case 'onvif':
+      return new ONVIFRecordingStrategy(recordingsBasePath, thumbnailsBasePath);
+    case 'uvc':
+      return new UVCRecordingStrategy(recordingsBasePath, thumbnailsBasePath);
+    default:
+      throw new Error(`Unknown camera type: ${camera.type}. Supported types: onvif, uvc`);
+  }
 }
 
 /**
@@ -107,92 +51,17 @@ async function startRecording(cameraId) {
         throw new Error(`Camera with ID ${cameraId} not found.`);
     }
 
-    const originalUrl = await getRtspUrl(camera);
-    const url = new URL(originalUrl); // Use URL to safely parse components
-    const authenticatedRtspUrl = `rtsp://${camera.user}:${encodeURIComponent(camera.pass)}@${url.hostname}:${url.port}${url.pathname}${url.search}`;
+    // Check if UVC camera is currently streaming (device can only be accessed by one process)
+    if (camera.type === 'uvc' && isStreaming(cameraId)) {
+        throw new Error(
+            `Cannot start recording for UVC camera ${cameraId} while streaming is active. ` +
+            `UVC cameras can only be accessed by one process at a time. ` +
+            `Please stop the stream before starting recording.`
+        );
+    }
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `cam-${cameraId}-${timestamp}.mp4`;
-    const outputPath = path.join(recordingsBasePath, filename);
-
-    // Create a record in the database
-    const [recording] = await db('recordings').insert({
-        camera_id: cameraId,
-        filename: filename,
-        start_time: new Date(),
-    }).returning('*');
-
-    const ffmpegArgs = [
-        '-rtsp_transport', 'tcp',
-        '-i', authenticatedRtspUrl,
-        '-c:v', 'copy', // Copy video stream without re-encoding
-        '-c:a', 'copy',   // Attempt to copy audio stream
-        '-an',          // Disable audio recording if copying fails or no audio stream exists
-        '-movflags', 'frag_keyframe+empty_moov', // Allow the MP4 to be streamable and fix issues if recording is interrupted
-        outputPath
-    ];
-
-    console.log(`Spawning FFmpeg for recording camera ${cameraId}: ffmpeg ${ffmpegArgs.join(' ')}`);
-    const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
-
-    activeRecordings.set(cameraId, { process: ffmpegProcess, recordingId: recording.id });
-
-    ffmpegProcess.stderr.on('data', (data) => {
-        console.error(`FFMPEG-REC (cam-${cameraId}): ${data}`);
-    });
-
-    ffmpegProcess.on('close', async (code) => {
-        console.log(`FFmpeg recording process for camera ${cameraId} exited with code ${code}`);
-
-        // Get the recording info before deleting (to access stopResolve/stopReject if present)
-        const recordingInfo = activeRecordings.get(cameraId);
-        activeRecordings.delete(cameraId);
-
-        // A code of 255 is often sent on SIGINT. A code of 0 is a clean exit.
-        // Any other code indicates a problem.
-        if (code !== 0 && code !== 255) {
-            console.error(`FFmpeg process exited with error code ${code}. Deleting recording record.`);
-            await db('recordings').where({ id: recording.id }).del();
-
-            // Reject the stopRecording promise if it exists
-            if (recordingInfo?.stopReject) {
-                recordingInfo.stopReject(new Error(`Recording process exited with an error code: ${code}`));
-            }
-        } else {
-            // Generate thumbnail
-            let thumbnailFilename = null;
-            try {
-                const thumbnailName = filename.replace('.mp4', '.jpg');
-                thumbnailFilename = await generateThumbnail(outputPath, thumbnailName);
-                console.log(`Thumbnail generated for recording ${filename}: ${thumbnailFilename}`);
-            } catch (err) {
-                console.error(`Failed to generate thumbnail for recording ${filename}:`, err);
-                // Continue without thumbnail - don't fail the recording
-            }
-
-            // Update the database record on a clean exit
-            await db('recordings').where({ id: recording.id }).update({
-                end_time: new Date(),
-                is_finished: true,
-                thumbnail: thumbnailFilename,
-            });
-            console.log(`Recording ${filename} marked as finished.`);
-
-            // Resolve the stopRecording promise if it exists
-            if (recordingInfo?.stopResolve) {
-                recordingInfo.stopResolve({ success: true, message: `Recording for camera ${cameraId} stopped and finalized.` });
-            }
-        }
-    });
-
-    ffmpegProcess.on('error', async (err) => {
-        console.error(`Failed to start FFmpeg recording for camera ${cameraId}:`, err);
-        activeRecordings.delete(cameraId);
-        // Delete the orphaned record from the database
-        await db('recordings').where({ id: recording.id }).del();
-    });
-
-    return { success: true, message: `Recording started for camera ${cameraId}.`, recordingId: recording.id, filename };
+    const strategy = getRecordingStrategy(camera);
+    return await strategy.startRecording(camera, cameraId, activeRecordings);
 }
 
 /**

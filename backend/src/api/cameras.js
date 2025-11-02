@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 const { testConnection } = require('../services/onvifService');
+const { listV4L2Devices, testUVCDevice } = require('../services/uvcService');
+const { validateCameraData, validateCameraUpdate } = require('../utils/cameraValidation');
 const { startStream, stopStream } = require('../services/streamService');
 const { startRecording, stopRecording } = require('../services/recordingService');
 const { scanSubnet, getLocalSubnet } = require('../services/discoveryService');
@@ -50,33 +52,112 @@ router.get('/discover', async (req, res) => {
     }
 });
 
-// POST /api/cameras - Add a new camera
-router.post('/', async (req, res) => {
-    const { name, host, port, user, pass, xaddr } = req.body; // Added xaddr
-
-    if (!name || !host) {
-        return res.status(400).json({ error: 'Missing required fields: name, host' });
-    }
+// GET /api/cameras/uvc/discover - Discover UVC (USB) cameras on the system
+router.get('/uvc/discover', async (req, res) => {
+    console.log('[UVC Discovery] Scanning for V4L2 devices...');
 
     try {
-        // 1. Test connection to the camera before saving
-        await testConnection({ host, port, user, pass, xaddr });
+        const devices = listV4L2Devices();
+        console.log(`[UVC Discovery] Found ${devices.length} UVC devices`);
+        res.json({ devices });
+    } catch (error) {
+        console.error('[UVC Discovery] Error scanning for UVC devices:', error);
+        res.status(500).json({ error: 'Failed to discover UVC devices', message: error.message });
+    }
+});
 
-        // 2. If connection is successful, save to the database
-        const [newCamera] = await db('cameras').insert({ name, host, port, user, pass, xaddr }).returning('*');
+// GET /api/cameras/:id/capabilities - Get camera capabilities
+router.get('/:id/capabilities', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        // Default capabilities
+        const capabilities = {
+            streaming: true,
+            recording: true,
+            thumbnails: true,
+            ptz: false,
+            discovery: false,
+            timeSync: false,
+            remoteAccess: false
+        };
+
+        // Type-specific capabilities
+        if (camera.type === 'onvif') {
+            capabilities.discovery = true;
+            capabilities.timeSync = true;
+            capabilities.remoteAccess = true;
+
+            // Check PTZ capability for ONVIF cameras
+            try {
+                const ptzResult = await checkPTZCapability({
+                    host: camera.host,
+                    port: camera.port,
+                    user: camera.user,
+                    pass: camera.pass,
+                    xaddr: camera.xaddr
+                });
+                capabilities.ptz = ptzResult.supported;
+            } catch (err) {
+                console.error(`Error checking PTZ capability for camera ${id}:`, err);
+                // PTZ remains false on error
+            }
+        }
+        // UVC cameras keep default capabilities (no PTZ, discovery, timeSync, or remoteAccess)
+
+        res.json(capabilities);
+    } catch (error) {
+        console.error(`Error getting capabilities for camera ${id}:`, error);
+        res.status(500).json({ error: 'An internal server error occurred while getting camera capabilities.' });
+    }
+});
+
+// POST /api/cameras - Add a new camera
+router.post('/', async (req, res) => {
+    const { type = 'onvif', ...cameraData } = req.body;
+
+    try {
+        // Validate camera data based on type
+        validateCameraData({ type, ...cameraData });
+
+        // Type-specific connection tests
+        if (type === 'onvif') {
+            // Test ONVIF connection before saving
+            await testConnection(cameraData);
+        } else if (type === 'uvc') {
+            // Test UVC device accessibility
+            await testUVCDevice(cameraData.device_path);
+        }
+
+        // If tests pass, save to database
+        const [newCamera] = await db('cameras')
+            .insert({ type, ...cameraData })
+            .returning('*');
+
         res.status(201).json(newCamera);
 
     } catch (error) {
-        console.error('Error adding camera:', error); // Log all errors immediately
+        console.error('Error adding camera:', error);
 
-        // Differentiate between a camera connection error and other internal errors
-        if (error.message.startsWith('Failed to connect')) {
-            return res.status(400).json({ message: `Camera connection failed. Please check host, port, and credentials. Details: ${error.message}` });
+        // Validation errors
+        if (error.message.includes('require')) {
+            return res.status(400).json({ message: error.message });
         }
 
-        // Handle potential unique constraint violation (e.g., host already exists)
+        // Connection test errors
+        if (error.message.startsWith('Failed to connect') || error.message.includes('not found')) {
+            return res.status(400).json({ message: `Camera connection test failed: ${error.message}` });
+        }
+
+        // Handle potential unique constraint violation
         if (error.code === 'SQLITE_CONSTRAINT') {
-            return res.status(409).json({ message: `A camera with host '${host}' already exists.` });
+            return res.status(409).json({ message: `A camera with this configuration already exists.` });
         }
 
         return res.status(500).json({ message: 'An internal server error occurred while adding the camera.' });

@@ -1,7 +1,20 @@
 
 import React, { useState } from 'react';
-import { Modal, Box, Typography, TextField, Button, CircularProgress, Alert } from '@mui/material';
-import { addCamera, syncCameraTime, type NewCamera } from '../services/api';
+import {
+  Modal,
+  Box,
+  Typography,
+  TextField,
+  Button,
+  CircularProgress,
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
+} from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material/Select';
+import { addCamera, syncCameraTime, discoverUVCCameras, type NewCamera, type UVCDevice } from '../services/api';
 
 const modalStyle = {
   position: 'absolute' as 'absolute',
@@ -13,6 +26,8 @@ const modalStyle = {
   border: '2px solid #000',
   boxShadow: 24,
   p: 4,
+  maxHeight: '90vh',
+  overflowY: 'auto',
 };
 
 interface AddCameraModalProps {
@@ -22,55 +37,106 @@ interface AddCameraModalProps {
 }
 
 const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCameraAdded }) => {
+  const [cameraType, setCameraType] = useState<'onvif' | 'uvc'>('onvif');
   const [name, setName] = useState('');
+
+  // ONVIF fields
   const [host, setHost] = useState('');
   const [port, setPort] = useState('80');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+
+  // UVC fields
+  const [devicePath, setDevicePath] = useState('');
+  const [uvcDevices, setUvcDevices] = useState<UVCDevice[]>([]);
+  const [discoveringUVC, setDiscoveringUVC] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const handleTypeChange = (event: SelectChangeEvent<'onvif' | 'uvc'>) => {
+    const newType = event.target.value as 'onvif' | 'uvc';
+    setCameraType(newType);
+    setError(null);
+
+    // Reset form fields when switching types
+    if (newType === 'uvc') {
+      setHost('');
+      setPort('80');
+      setUser('');
+      setPass('');
+    } else {
+      setDevicePath('');
+    }
+  };
+
+  const handleDiscoverUVC = async () => {
+    setDiscoveringUVC(true);
+    setError(null);
+
+    try {
+      const result = await discoverUVCCameras();
+      setUvcDevices(result.devices);
+
+      if (result.devices.length === 0) {
+        setError('No UVC devices found. Make sure your USB camera is connected.');
+      }
+    } catch (err: any) {
+      console.error('Failed to discover UVC devices:', err);
+      setError('Failed to discover UVC devices. Make sure you are running on Linux with V4L2 support.');
+    } finally {
+      setDiscoveringUVC(false);
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setLoading(true);
-    setLoadingMessage('Testing connection...');
-
-    const newCamera: NewCamera = {
-      name,
-      host,
-      port: parseInt(port, 10),
-      user,
-      pass,
-    };
 
     try {
-      // Add the camera
+      let newCamera: NewCamera;
+
+      if (cameraType === 'onvif') {
+        setLoadingMessage('Testing ONVIF connection...');
+        newCamera = {
+          type: 'onvif',
+          name,
+          host,
+          port: parseInt(port, 10),
+          user,
+          pass,
+        };
+      } else {
+        setLoadingMessage('Testing UVC device...');
+        newCamera = {
+          type: 'uvc',
+          name,
+          device_path: devicePath,
+        };
+      }
+
+      // Add the camera (backend will test connection)
       const addedCamera = await addCamera(newCamera);
 
-      // Synchronize time with server
-      setLoadingMessage('Synchronizing time...');
-      try {
-        await syncCameraTime(addedCamera.id);
-        console.log('Camera time synchronized successfully');
-      } catch (syncErr: any) {
-        console.warn('Failed to sync camera time:', syncErr);
-        // Don't fail the entire operation if time sync fails
-        // The user can manually sync later
+      // Synchronize time only for ONVIF cameras
+      if (cameraType === 'onvif') {
+        setLoadingMessage('Synchronizing time...');
+        try {
+          await syncCameraTime(addedCamera.id);
+          if (import.meta.env.DEV) console.log('Camera time synchronized successfully');
+        } catch (syncErr: any) {
+          console.warn('Failed to sync camera time:', syncErr);
+          // Don't fail the entire operation if time sync fails
+        }
       }
 
       onCameraAdded();
-      onClose();
-      // Reset form
-      setName('');
-      setHost('');
-      setPort('80');
-      setUser('');
-      setPass('');
+      handleClose();
     } catch (err: any) {
       console.error('Failed to add camera:', err);
-      const message = err.response?.data?.message || 'Failed to connect to the camera. Please check the details and try again.';
+      const message = err.response?.data?.message || 'Failed to add the camera. Please check the details and try again.';
       setError(message);
     } finally {
       setLoading(false);
@@ -78,10 +144,24 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
     }
   };
 
+  const handleClose = () => {
+    // Reset form
+    setName('');
+    setHost('');
+    setPort('80');
+    setUser('');
+    setPass('');
+    setDevicePath('');
+    setUvcDevices([]);
+    setError(null);
+    setCameraType('onvif');
+    onClose();
+  };
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       aria-labelledby="add-camera-modal-title"
     >
       <Box sx={modalStyle} component="form" onSubmit={handleSubmit}>
@@ -89,6 +169,21 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
           Add New Camera
         </Typography>
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+
+        <FormControl fullWidth margin="normal">
+          <InputLabel id="camera-type-label">Camera Type</InputLabel>
+          <Select
+            labelId="camera-type-label"
+            id="camera-type"
+            value={cameraType}
+            label="Camera Type"
+            onChange={handleTypeChange}
+          >
+            <MenuItem value="onvif">ONVIF Network Camera</MenuItem>
+            <MenuItem value="uvc">USB UVC Camera</MenuItem>
+          </Select>
+        </FormControl>
+
         <TextField
           margin="normal"
           required
@@ -100,59 +195,100 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          id="host"
-          label="Host or IP Address"
-          name="host"
-          value={host}
-          onChange={(e) => setHost(e.target.value)}
-        />
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          id="port"
-          label="ONVIF Port"
-          name="port"
-          type="number"
-          value={port}
-          onChange={(e) => setPort(e.target.value)}
-        />
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          id="user"
-          label="Username"
-          name="user"
-          value={user}
-          onChange={(e) => setUser(e.target.value)}
-        />
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          id="pass"
-          label="Password"
-          name="pass"
-          type="password"
-          value={pass}
-          onChange={(e) => setPass(e.target.value)}
-        />
+
+        {cameraType === 'onvif' && (
+          <>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="host"
+              label="Host or IP Address"
+              name="host"
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="port"
+              label="ONVIF Port"
+              name="port"
+              type="number"
+              value={port}
+              onChange={(e) => setPort(e.target.value)}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="user"
+              label="Username"
+              name="user"
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="pass"
+              label="Password"
+              name="pass"
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+            />
+          </>
+        )}
+
+        {cameraType === 'uvc' && (
+          <>
+            <Button
+              onClick={handleDiscoverUVC}
+              variant="outlined"
+              fullWidth
+              disabled={discoveringUVC}
+              sx={{ mt: 2 }}
+            >
+              {discoveringUVC ? 'Discovering...' : 'Discover USB Cameras'}
+            </Button>
+
+            {uvcDevices.length > 0 && (
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="device-path-label">Device</InputLabel>
+                <Select
+                  labelId="device-path-label"
+                  id="device-path"
+                  value={devicePath}
+                  label="Device"
+                  onChange={(e) => setDevicePath(e.target.value)}
+                  required
+                >
+                  {uvcDevices.map((dev) => (
+                    <MenuItem key={dev.device_path} value={dev.device_path}>
+                      {dev.name} ({dev.device_path})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </>
+        )}
+
         {loading && loadingMessage && (
           <Typography variant="body2" sx={{ mt: 2, textAlign: 'center', color: 'text.secondary' }}>
             {loadingMessage}
           </Typography>
         )}
+
         <Box sx={{ mt: 2, position: 'relative' }}>
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            disabled={loading}
+            disabled={loading || (cameraType === 'uvc' && !devicePath)}
           >
             Test and Save
           </Button>

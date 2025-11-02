@@ -1,9 +1,24 @@
 import React, { useState } from 'react';
 import type { Camera } from '../services/api';
 import { deleteCamera, syncCameraTime } from '../services/api';
-import { List, ListItem, ListItemText, Button, CircularProgress, Alert, Box, Stack, IconButton, Snackbar } from '@mui/material';
+import {
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Button,
+  CircularProgress,
+  Alert,
+  Box,
+  Stack,
+  IconButton,
+  Snackbar,
+  Chip
+} from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SyncIcon from '@mui/icons-material/Sync';
+import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
+import UsbIcon from '@mui/icons-material/Usb';
 
 
 interface CameraListProps {
@@ -74,7 +89,12 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
               <ListItem
                 key={camera.id}
                 secondaryAction={
-                  <Stack direction="row" spacing={1}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip
+                      label={camera.type.toUpperCase()}
+                      size="small"
+                      color={camera.type === 'onvif' ? 'primary' : 'secondary'}
+                    />
                     <Button
                       variant="contained"
                       color={isActive ? "secondary" : "primary"}
@@ -82,19 +102,21 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                     >
                       {isActive ? 'Stop Stream' : 'View Stream'}
                     </Button>
-                    <IconButton
-                      edge="end"
-                      aria-label="sync time"
-                      onClick={() => handleSyncTime(camera.id)}
-                      disabled={syncingCameraId === camera.id}
-                      title="Sync camera time with server"
-                    >
-                      {syncingCameraId === camera.id ? (
-                        <CircularProgress size={24} />
-                      ) : (
-                        <SyncIcon />
-                      )}
-                    </IconButton>
+                    {camera.type === 'onvif' && (
+                      <IconButton
+                        edge="end"
+                        aria-label="sync time"
+                        onClick={() => handleSyncTime(camera.id)}
+                        disabled={syncingCameraId === camera.id}
+                        title="Sync camera time with server"
+                      >
+                        {syncingCameraId === camera.id ? (
+                          <CircularProgress size={24} />
+                        ) : (
+                          <SyncIcon />
+                        )}
+                      </IconButton>
+                    )}
                     <IconButton
                       edge="end"
                       aria-label="delete"
@@ -106,7 +128,21 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                   </Stack>
                 }
               >
-                <ListItemText primary={camera.name} secondary={`Host: ${camera.host}`} />
+                <ListItemIcon>
+                  {camera.type === 'onvif' ? (
+                    <NetworkCheckIcon color="primary" />
+                  ) : (
+                    <UsbIcon color="secondary" />
+                  )}
+                </ListItemIcon>
+                <ListItemText
+                  primary={camera.name}
+                  secondary={
+                    camera.type === 'onvif'
+                      ? `Host: ${camera.host}:${camera.port}`
+                      : `Device: ${camera.device_path}`
+                  }
+                />
               </ListItem>
             );
           })

@@ -187,6 +187,128 @@ npm start
 pm2 start src/index.js --name onvif-backend
 ```
 
+## UVC Camera Support (Linux Only)
+
+This application supports USB UVC cameras in addition to ONVIF network cameras. UVC support is **Linux-only** and requires V4L2 (Video4Linux2).
+
+### System Requirements for UVC Cameras
+
+#### Required Packages
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install v4l-utils ffmpeg
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install v4l-utils ffmpeg
+```
+
+#### User Permissions
+
+The user running the backend must have access to video devices:
+
+```bash
+# Add user to video group
+sudo usermod -a -G video $USER
+
+# Log out and log back in for changes to take effect
+# Or use newgrp to apply immediately
+newgrp video
+
+# Verify permissions
+ls -l /dev/video*
+# Should show: crw-rw---- 1 root video ...
+```
+
+### Verify UVC Camera Detection
+
+```bash
+# List all video devices
+ls -l /dev/video*
+
+# Get detailed device information
+v4l2-ctl --list-devices
+
+# Check device capabilities
+v4l2-ctl --device=/dev/video0 --info
+v4l2-ctl --device=/dev/video0 --list-formats
+```
+
+### Platform Compatibility
+
+| Platform | ONVIF Support | UVC Support | Notes |
+|----------|---------------|-------------|-------|
+| **Linux** | ✅ Yes | ✅ Yes | Full support for both camera types |
+| **Windows** | ✅ Yes | ❌ No | V4L2 is Linux-only |
+| **macOS** | ✅ Yes | ❌ No | V4L2 is Linux-only |
+
+### Performance Considerations
+
+UVC cameras require video encoding, which is CPU-intensive:
+
+- **ONVIF cameras**: Use `-c:v copy` (no encoding, low CPU usage)
+- **UVC cameras**: Use `-c:v libx264` (encoding required, higher CPU usage)
+
+**Recommendations:**
+- Limit simultaneous UVC cameras to 2-3 on typical hardware
+- ONVIF and UVC cameras can be used together (total max: 4 cameras)
+- For better UVC performance, consider hardware encoding:
+  ```bash
+  # Check for hardware acceleration support
+  ffmpeg -hwaccels
+
+  # Intel Quick Sync (VAAPI)
+  # AMD/Intel GPU encoding
+  ```
+
+### Troubleshooting UVC Cameras
+
+#### Issue: "Device not found"
+
+```bash
+# Check if device exists
+ls -l /dev/video*
+
+# Check kernel messages
+dmesg | grep video
+
+# Verify UVC driver is loaded
+lsmod | grep uvcvideo
+```
+
+#### Issue: "Permission denied"
+
+```bash
+# Check user is in video group
+groups $USER
+
+# If not, add and re-login
+sudo usermod -a -G video $USER
+```
+
+#### Issue: "Device busy"
+
+```bash
+# Check which process is using the device
+sudo fuser /dev/video0
+
+# Or use lsof
+lsof /dev/video0
+```
+
+#### Issue: "FFmpeg cannot open device"
+
+```bash
+# Test device with FFmpeg directly
+ffmpeg -f v4l2 -i /dev/video0 -t 5 -f null -
+
+# Check supported formats
+v4l2-ctl --device=/dev/video0 --list-formats-ext
+```
+
 ## Debug vs Production Code
 
 ### Development Build
