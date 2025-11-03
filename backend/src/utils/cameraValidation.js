@@ -7,7 +7,7 @@
 /**
  * Validates camera data based on camera type
  * @param {Object} camera - Camera data to validate
- * @param {string} camera.type - Camera type ('onvif' or 'uvc')
+ * @param {string} camera.type - Camera type ('onvif', 'uvc', or 'uvc_rtsp')
  * @param {string} camera.name - Camera name
  * @throws {Error} If validation fails
  */
@@ -16,8 +16,8 @@ function validateCameraData(camera) {
     throw new Error('Camera type is required');
   }
 
-  if (!['onvif', 'uvc'].includes(camera.type)) {
-    throw new Error(`Invalid camera type: ${camera.type}. Must be 'onvif' or 'uvc'`);
+  if (!['onvif', 'uvc', 'uvc_rtsp'].includes(camera.type)) {
+    throw new Error(`Invalid camera type: ${camera.type}. Must be 'onvif', 'uvc', or 'uvc_rtsp'`);
   }
 
   if (!camera.name || typeof camera.name !== 'string' || camera.name.trim() === '') {
@@ -51,8 +51,32 @@ function validateCameraData(camera) {
       throw new Error('xaddr must be a string');
     }
 
+  } else if (camera.type === 'uvc_rtsp') {
+    // UVC_RTSP-specific validation (similar to ONVIF but credentials are optional)
+    if (!camera.host || typeof camera.host !== 'string' || camera.host.trim() === '') {
+      throw new Error('UVC_RTSP cameras require a valid host (RTSP server address)');
+    }
+
+    // Port validation (required for RTSP server)
+    if (!camera.port) {
+      throw new Error('UVC_RTSP cameras require a port (RTSP server port, typically 8554)');
+    }
+    const port = Number(camera.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error('Port must be an integer between 1 and 65535');
+    }
+
+    // Username and password are optional for UVC_RTSP
+    if (camera.user !== undefined && camera.user !== null && typeof camera.user !== 'string') {
+      throw new Error('Username must be a string if provided');
+    }
+
+    if (camera.pass !== undefined && camera.pass !== null && typeof camera.pass !== 'string') {
+      throw new Error('Password must be a string if provided');
+    }
+
   } else if (camera.type === 'uvc') {
-    // UVC-specific validation
+    // UVC-specific validation (direct V4L2 access)
     if (!camera.device_path || typeof camera.device_path !== 'string' || camera.device_path.trim() === '') {
       throw new Error('UVC cameras require a valid device_path (e.g., /dev/video0)');
     }
@@ -74,7 +98,8 @@ function validateCameraData(camera) {
 function validateCameraUpdate(updates, currentCamera) {
   const ALLOWED_UPDATE_FIELDS = {
     onvif: ['name', 'host', 'port', 'user', 'pass', 'xaddr'],
-    uvc: ['name', 'device_path']
+    uvc: ['name', 'device_path'],
+    uvc_rtsp: ['name', 'host', 'port', 'user', 'pass']
   };
 
   const allowedFields = ALLOWED_UPDATE_FIELDS[currentCamera.type] || [];

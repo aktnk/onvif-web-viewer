@@ -3,6 +3,7 @@ const path = require('path');
 const db = require('../db/db');
 const ONVIFRecordingStrategy = require('./recording/ONVIFRecordingStrategy');
 const UVCRecordingStrategy = require('./recording/UVCRecordingStrategy');
+const UVC_RTSPRecordingStrategy = require('./recording/UVC_RTSPRecordingStrategy');
 const { isStreaming } = require('./streamService');
 
 // In-memory store for active FFmpeg recording processes: Map<cameraId, { process: ChildProcess, recordingId: number }>
@@ -31,8 +32,10 @@ function getRecordingStrategy(camera) {
       return new ONVIFRecordingStrategy(recordingsBasePath, thumbnailsBasePath);
     case 'uvc':
       return new UVCRecordingStrategy(recordingsBasePath, thumbnailsBasePath);
+    case 'uvc_rtsp':
+      return new UVC_RTSPRecordingStrategy(recordingsBasePath, thumbnailsBasePath);
     default:
-      throw new Error(`Unknown camera type: ${camera.type}. Supported types: onvif, uvc`);
+      throw new Error(`Unknown camera type: ${camera.type}. Supported types: onvif, uvc, uvc_rtsp`);
   }
 }
 

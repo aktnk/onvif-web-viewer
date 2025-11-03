@@ -1,15 +1,18 @@
 # ONVIF and UVC Camera Web Viewer
 
-This is a full-stack web application designed to manage and view both ONVIF-compliant network cameras and USB UVC (USB Video Class) cameras. It consists of a Node.js backend and a React frontend.
+This is a full-stack web application designed to manage and view both ONVIF-compliant network cameras and USB UVC (USB Video Class) cameras. The application supports three camera connection modes: direct ONVIF network access, direct UVC V4L2 device access, and UVC cameras via RTSP server. It consists of a Node.js backend and a React frontend.
 
 ![Main Interface](docs/images/main.png)
 
 ## Features
 
-*   **Dual Camera Type Support**: Supports both ONVIF network cameras and USB UVC cameras on Linux systems.
+*   **Three Camera Connection Modes**:
+    *   **ONVIF Network Cameras**: Direct connection to ONVIF-compliant IP cameras via RTSP
+    *   **UVC Direct (V4L2)**: Direct access to USB UVC cameras on Linux systems (exclusive device access)
+    *   **UVC via RTSP Server**: USB UVC cameras streamed through MediaMTX RTSP server, enabling simultaneous streaming and recording
 *   **ONVIF Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
 *   **UVC Camera Discovery**: Automatically detect USB UVC cameras connected to the host system (Linux only, requires V4L2).
-*   **Camera Management**: Register, update, delete, and list cameras of both types with visual type indicators.
+*   **Camera Management**: Register, update, delete, and list cameras of all types with visual type indicators (ONVIF, UVC, UVC-RTSP).
 *   **Time Synchronization**: Synchronize ONVIF camera time with the server's system time via ONVIF protocol. Cameras are automatically synced when registered, and can be manually synced anytime.
 *   **Multi-Camera Live Streaming**: View up to 4 live HLS streams simultaneously in a 2×2 grid layout. Each camera stream operates independently with its own controls. Mix ONVIF and UVC cameras in the same grid.
 *   **PTZ Control**: Control Pan-Tilt-Zoom (PTZ) cameras directly from the web interface with intuitive directional controls and zoom slider. PTZ controls are automatically displayed for ONVIF cameras that support the feature.
@@ -111,11 +114,41 @@ The project is divided into two main parts:
     # Log out and log back in for changes to take effect
     ```
 
+**For UVC via RTSP Server (Optional, Linux only):**
+*   [MediaMTX](https://github.com/bluenviron/mediamtx) RTSP server for streaming UVC cameras
+*   Enables simultaneous streaming and recording (not possible with direct V4L2 access due to device exclusivity)
+*   Installation:
+    ```bash
+    # Download latest MediaMTX release
+    MEDIAMTX_VERSION=$(curl -s https://api.github.com/repos/bluenviron/mediamtx/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+    wget "https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}/mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz"
+    tar -xzf mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz
+    sudo mv mediamtx /usr/local/bin/
+    sudo chmod +x /usr/local/bin/mediamtx
+    ```
+*   Configuration example (`mediamtx.yml`):
+    ```yaml
+    rtspAddress: :8554
+
+    paths:
+      uvc_camera_1:
+        runOnInit: >
+          ffmpeg -f v4l2 -input_format mjpeg -video_size 1280x720 -framerate 30
+          -i /dev/video0 -c:v libx264 -preset ultrafast -an
+          -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+        runOnInitRestart: yes
+    ```
+*   Run MediaMTX:
+    ```bash
+    /usr/local/bin/mediamtx /path/to/mediamtx.yml
+    ```
+
 **Platform Compatibility:**
 | Feature | Linux | Windows | macOS |
 |---------|-------|---------|-------|
 | ONVIF Cameras | ✅ | ✅ | ✅ |
-| UVC Cameras | ✅ | ❌ | ❌ |
+| UVC Direct (V4L2) | ✅ | ❌ | ❌ |
+| UVC via RTSP Server | ✅ | ❌ | ❌ |
 
 ### Installation & Running
 
@@ -153,6 +186,7 @@ The backend uses [Knex.js](https://knexjs.org/) as a SQL query builder and migra
 - `20251018120100_create_recordings_table.js` - Creates the `recordings` table
 - `20251031131841_add_thumbnail_to_recordings.js` - Adds `thumbnail` column for recording preview images
 - `20251102000000_add_camera_types.js` - Adds camera type support (ONVIF/UVC) and device path field
+- `20251103000000_add_uvc_rtsp_camera_type.js` - Adds UVC_RTSP camera type for UVC cameras via RTSP server
 
 **Common Knex Commands:**
 
@@ -177,13 +211,14 @@ npx knex migrate:make migration_name
 *cameras* table:
 - `id` (primary key, auto-increment)
 - `name` (text) - Camera display name
-- `type` (text) - Camera type: 'onvif' or 'uvc'
-- `host` (text, nullable) - IP address or hostname (ONVIF only)
-- `port` (integer, nullable) - ONVIF port (ONVIF only, default: 80)
-- `user` (text, nullable) - ONVIF username (ONVIF only)
-- `pass` (text, nullable) - ONVIF password (ONVIF only)
+- `type` (text) - Camera type: 'onvif', 'uvc', or 'uvc_rtsp'
+- `host` (text, nullable) - IP address or hostname (ONVIF and UVC_RTSP)
+- `port` (integer, nullable) - Port number (ONVIF: default 80, UVC_RTSP: default 8554)
+- `user` (text, nullable) - Username for authentication (ONVIF and UVC_RTSP, optional)
+- `pass` (text, nullable) - Password for authentication (ONVIF and UVC_RTSP, optional)
 - `xaddr` (text, nullable) - Custom ONVIF device service URL (ONVIF only)
-- `device_path` (text, nullable) - Device path (UVC only, e.g., /dev/video0)
+- `device_path` (text, nullable) - Device path (UVC Direct only, e.g., /dev/video0)
+- `stream_path` (text, nullable) - RTSP stream path (UVC_RTSP only, default: /uvc_camera_1)
 
 *recordings* table:
 - `id` (primary key, auto-increment)
@@ -229,7 +264,8 @@ Once the application is running, you can manage your cameras through the web int
     *   You can add unregistered cameras by providing their credentials. The discovery window will remain open, allowing you to add multiple cameras without re-scanning.
 *   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog.
     *   **ONVIF Camera**: Select "ONVIF Network Camera" type and enter camera details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera. After successful registration, the camera's time is automatically synchronized with the server.
-    *   **UVC Camera (Linux only)**: Select "USB UVC Camera" type, click "Discover USB Cameras" to scan for connected devices, then select a device from the dropdown. The system verifies device accessibility before adding.
+    *   **UVC Camera Direct (Linux only)**: Select "USB UVC Camera" type, click "Discover USB Cameras" to scan for connected devices, then select a device from the dropdown. The system verifies device accessibility before adding. Note: Direct V4L2 access means only one process can use the device at a time (streaming OR recording, not both simultaneously).
+    *   **UVC Camera via RTSP Server (Linux only)**: Select "UVC via RTSP Server" type and enter RTSP server details (Name, Host/IP, Port, optional Username/Password). This requires MediaMTX or another RTSP server to be running and configured to stream from the UVC device. Benefits: allows simultaneous streaming and recording, and lower CPU usage compared to direct V4L2 access.
 *   **Synchronizing Camera Time**: Click the sync icon (⟳) next to any ONVIF camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors. (Note: Time synchronization is only available for ONVIF cameras, not UVC cameras.)
 *   **Deleting a Camera**: Click the red delete icon (🗑️) next to a camera in the main list. A confirmation prompt will appear before deletion.
 *   **Viewing Multiple Streams**:
@@ -289,12 +325,25 @@ Registers a new camera. Tests the camera connection (ONVIF or UVC) before saving
 }
 ```
 
-**UVC Camera Request Body**:
+**UVC Camera (Direct V4L2) Request Body**:
 ```json
 {
   "type": "uvc",
   "name": "USB Webcam",
   "device_path": "/dev/video0"
+}
+```
+
+**UVC Camera (via RTSP Server) Request Body**:
+```json
+{
+  "type": "uvc_rtsp",
+  "name": "USB Camera via MediaMTX",
+  "host": "localhost",
+  "port": 8554,
+  "user": "optional_username",     // Optional
+  "pass": "optional_password",     // Optional
+  "stream_path": "/uvc_camera_1"  // Optional, defaults to /uvc_camera_1
 }
 ```
 
@@ -347,13 +396,25 @@ Retrieves the capabilities of a specific camera. Different camera types support 
 For UVC cameras, `ptz`, `discovery`, `timeSync`, and `remoteAccess` will be `false`.
 
 #### `POST /api/cameras/:id/stream/start`
-Starts the FFmpeg process to convert the camera's stream to HLS. Works for both ONVIF (RTSP input) and UVC (V4L2 input) cameras. Returns the relative URL of the HLS playlist (e.g., `/streams/1/index.m3u8`).
+Starts the FFmpeg process to convert the camera's stream to HLS. Works for all camera types:
+- **ONVIF**: RTSP input with `-c:v copy` (no re-encoding, low CPU usage)
+- **UVC Direct**: V4L2 input with libx264 encoding (higher CPU usage)
+- **UVC_RTSP**: RTSP input with libx264 re-encoding for proper keyframes
+
+Returns the relative URL of the HLS playlist (e.g., `/streams/1/index.m3u8`).
 
 #### `POST /api/cameras/:id/stream/stop`
 Stops the FFmpeg process for the specified camera.
 
 #### `POST /api/cameras/:id/recording/start`
-Starts a new recording for the specified camera. Works for both ONVIF and UVC cameras. The video is saved as an MP4 file on the server.
+Starts a new recording for the specified camera. Works for all camera types:
+- **ONVIF**: RTSP to MP4 with `-c:v copy` (low CPU)
+- **UVC Direct**: V4L2 to MP4 with libx264 encoding (higher CPU, exclusive device access)
+- **UVC_RTSP**: RTSP to MP4 with `-c:v copy` (low CPU, allows simultaneous streaming)
+
+The video is saved as an MP4 file on the server.
+
+**Note**: For UVC Direct cameras, streaming and recording cannot run simultaneously due to V4L2 device exclusivity. Use UVC_RTSP mode to enable simultaneous operations.
 
 #### `POST /api/cameras/:id/recording/stop`
 Stops an in-progress recording and finalizes the MP4 file. Automatically generates a thumbnail from the recording.

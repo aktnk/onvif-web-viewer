@@ -37,10 +37,10 @@ interface AddCameraModalProps {
 }
 
 const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCameraAdded }) => {
-  const [cameraType, setCameraType] = useState<'onvif' | 'uvc'>('onvif');
+  const [cameraType, setCameraType] = useState<'onvif' | 'uvc' | 'uvc_rtsp'>('onvif');
   const [name, setName] = useState('');
 
-  // ONVIF fields
+  // ONVIF and UVC_RTSP fields
   const [host, setHost] = useState('');
   const [port, setPort] = useState('80');
   const [user, setUser] = useState('');
@@ -55,8 +55,8 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const handleTypeChange = (event: SelectChangeEvent<'onvif' | 'uvc'>) => {
-    const newType = event.target.value as 'onvif' | 'uvc';
+  const handleTypeChange = (event: SelectChangeEvent<'onvif' | 'uvc' | 'uvc_rtsp'>) => {
+    const newType = event.target.value as 'onvif' | 'uvc' | 'uvc_rtsp';
     setCameraType(newType);
     setError(null);
 
@@ -66,8 +66,17 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
       setPort('80');
       setUser('');
       setPass('');
+    } else if (newType === 'uvc_rtsp') {
+      setDevicePath('');
+      // Set default RTSP port
+      if (!port || port === '80') {
+        setPort('8554'); // MediaMTX default port
+      }
     } else {
       setDevicePath('');
+      if (port === '8554') {
+        setPort('80'); // ONVIF default port
+      }
     }
   };
 
@@ -107,6 +116,16 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
           port: parseInt(port, 10),
           user,
           pass,
+        };
+      } else if (cameraType === 'uvc_rtsp') {
+        setLoadingMessage('Testing RTSP connection...');
+        newCamera = {
+          type: 'uvc_rtsp',
+          name,
+          host,
+          port: parseInt(port, 10),
+          user: user || undefined,
+          pass: pass || undefined,
         };
       } else {
         setLoadingMessage('Testing UVC device...');
@@ -180,7 +199,8 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
             onChange={handleTypeChange}
           >
             <MenuItem value="onvif">ONVIF Network Camera</MenuItem>
-            <MenuItem value="uvc">USB UVC Camera</MenuItem>
+            <MenuItem value="uvc">USB UVC Camera (Direct V4L2)</MenuItem>
+            <MenuItem value="uvc_rtsp">USB UVC Camera (via RTSP Server)</MenuItem>
           </Select>
         </FormControl>
 
@@ -196,45 +216,47 @@ const AddCameraModal: React.FC<AddCameraModalProps> = ({ open, onClose, onCamera
           onChange={(e) => setName(e.target.value)}
         />
 
-        {cameraType === 'onvif' && (
+        {(cameraType === 'onvif' || cameraType === 'uvc_rtsp') && (
           <>
             <TextField
               margin="normal"
               required
               fullWidth
               id="host"
-              label="Host or IP Address"
+              label={cameraType === 'onvif' ? 'Host or IP Address' : 'RTSP Server Host'}
               name="host"
               value={host}
               onChange={(e) => setHost(e.target.value)}
+              helperText={cameraType === 'uvc_rtsp' ? 'e.g., localhost or 192.168.1.100' : undefined}
             />
             <TextField
               margin="normal"
               required
               fullWidth
               id="port"
-              label="ONVIF Port"
+              label={cameraType === 'onvif' ? 'ONVIF Port' : 'RTSP Server Port'}
               name="port"
               type="number"
               value={port}
               onChange={(e) => setPort(e.target.value)}
+              helperText={cameraType === 'uvc_rtsp' ? 'MediaMTX default: 8554' : undefined}
             />
             <TextField
               margin="normal"
-              required
+              required={cameraType === 'onvif'}
               fullWidth
               id="user"
-              label="Username"
+              label={cameraType === 'onvif' ? 'Username' : 'Username (optional)'}
               name="user"
               value={user}
               onChange={(e) => setUser(e.target.value)}
             />
             <TextField
               margin="normal"
-              required
+              required={cameraType === 'onvif'}
               fullWidth
               id="pass"
-              label="Password"
+              label={cameraType === 'onvif' ? 'Password' : 'Password (optional)'}
               name="pass"
               type="password"
               value={pass}

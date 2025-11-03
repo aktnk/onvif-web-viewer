@@ -350,11 +350,14 @@ function App() {
       });
 
       if (import.meta.env.DEV) console.log(`[App] Triggering recording list refresh...`);
-      setRecordingListVersion(v => {
-        const newVersion = v + 1;
-        if (import.meta.env.DEV) console.log(`[App] Recording list version updated: ${v} -> ${newVersion}`);
-        return newVersion;
-      });
+      // Wait a moment for backend to update database before refreshing list
+      setTimeout(() => {
+        setRecordingListVersion(v => {
+          const newVersion = v + 1;
+          if (import.meta.env.DEV) console.log(`[App] Recording list version updated: ${v} -> ${newVersion}`);
+          return newVersion;
+        });
+      }, 500); // 500ms delay to allow database update
     } catch (error) {
       console.error('Failed to stop recording:', error);
 

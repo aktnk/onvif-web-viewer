@@ -91,9 +91,9 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                 secondaryAction={
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Chip
-                      label={camera.type.toUpperCase()}
+                      label={camera.type === 'uvc_rtsp' ? 'UVC-RTSP' : camera.type.toUpperCase()}
                       size="small"
-                      color={camera.type === 'onvif' ? 'primary' : 'secondary'}
+                      color={camera.type === 'onvif' ? 'primary' : camera.type === 'uvc_rtsp' ? 'success' : 'secondary'}
                     />
                     <Button
                       variant="contained"
@@ -131,6 +131,8 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                 <ListItemIcon>
                   {camera.type === 'onvif' ? (
                     <NetworkCheckIcon color="primary" />
+                  ) : camera.type === 'uvc_rtsp' ? (
+                    <NetworkCheckIcon color="success" />
                   ) : (
                     <UsbIcon color="secondary" />
                   )}
@@ -138,7 +140,7 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                 <ListItemText
                   primary={camera.name}
                   secondary={
-                    camera.type === 'onvif'
+                    camera.type === 'onvif' || camera.type === 'uvc_rtsp'
                       ? `Host: ${camera.host}:${camera.port}`
                       : `Device: ${camera.device_path}`
                   }
