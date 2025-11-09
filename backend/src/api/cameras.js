@@ -52,22 +52,40 @@ router.get('/discover', async (req, res) => {
 
 // POST /api/cameras - Add a new camera
 router.post('/', async (req, res) => {
-    const { name, host, port, user, pass, xaddr } = req.body; // Added xaddr
+    const { name, host, port, user, pass, xaddr, type, stream_path } = req.body;
 
     if (!name || !host) {
         return res.status(400).json({ error: 'Missing required fields: name, host' });
     }
 
-    try {
-        // 1. Test connection to the camera before saving
-        await testConnection({ host, port, user, pass, xaddr });
+    const cameraType = type || 'onvif'; // Default to onvif for backward compatibility
 
-        // 2. If connection is successful, save to the database
-        const [newCamera] = await db('cameras').insert({ name, host, port, user, pass, xaddr }).returning('*');
+    // Validate camera type
+    if (!['onvif', 'rtsp'].includes(cameraType)) {
+        return res.status(400).json({ error: 'Invalid camera type. Must be "onvif" or "rtsp".' });
+    }
+
+    try {
+        // Test connection only for ONVIF cameras
+        if (cameraType === 'onvif') {
+            await testConnection({ host, port, user, pass, xaddr });
+        }
+        // For RTSP cameras, we skip the connection test (will fail when stream starts if invalid)
+
+        // Save to the database
+        const cameraData = { name, host, port, user, pass, type: cameraType };
+        if (cameraType === 'onvif' && xaddr) {
+            cameraData.xaddr = xaddr;
+        }
+        if (cameraType === 'rtsp' && stream_path) {
+            cameraData.stream_path = stream_path;
+        }
+
+        const [newCamera] = await db('cameras').insert(cameraData).returning('*');
         res.status(201).json(newCamera);
 
     } catch (error) {
-        console.error('Error adding camera:', error); // Log all errors immediately
+        console.error('Error adding camera:', error);
 
         // Differentiate between a camera connection error and other internal errors
         if (error.message.startsWith('Failed to connect')) {
@@ -402,6 +420,55 @@ router.post('/:id/ptz/stop', async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error(`Error stopping PTZ for camera ${id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/cameras/:id/capabilities - Get camera capabilities based on type
+router.get('/:id/capabilities', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const camera = await db('cameras').where({ id: Number(id) }).first();
+
+        if (!camera) {
+            return res.status(404).json({ error: `Camera with ID ${id} not found.` });
+        }
+
+        const capabilities = {
+            streaming: true,
+            recording: true,
+            thumbnails: true,
+            ptz: false,
+            discovery: false,
+            timeSync: false,
+            remoteAccess: true
+        };
+
+        // ONVIF cameras have additional capabilities
+        if (camera.type === 'onvif') {
+            capabilities.discovery = true;
+            capabilities.timeSync = true;
+
+            // Check PTZ capability asynchronously (don't wait for it)
+            try {
+                const ptzResult = await checkPTZCapability({
+                    host: camera.host,
+                    port: camera.port,
+                    user: camera.user,
+                    pass: camera.pass,
+                    xaddr: camera.xaddr
+                });
+                capabilities.ptz = ptzResult.supported;
+            } catch (err) {
+                console.error(`Error checking PTZ for camera ${id}:`, err);
+                // Keep ptz as false if check fails
+            }
+        }
+
+        res.json(capabilities);
+    } catch (error) {
+        console.error(`Error getting capabilities for camera ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
