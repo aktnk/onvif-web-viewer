@@ -1,4 +1,4 @@
-# ONVIF Web Application
+# ONVIF canera and RTSP camera Web Application
 
 This is a full-stack web application designed to manage and view ONVIF-compliant IP cameras and generic RTSP cameras. It consists of a Node.js backend and a React frontend, supporting multiple camera types with intelligent feature detection.
 
