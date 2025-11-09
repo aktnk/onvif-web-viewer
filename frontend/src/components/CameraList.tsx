@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import type { Camera } from '../services/api';
 import { deleteCamera, syncCameraTime } from '../services/api';
-import { List, ListItem, ListItemText, Button, CircularProgress, Alert, Box, Stack, IconButton, Snackbar } from '@mui/material';
+import { List, ListItem, ListItemText, Button, CircularProgress, Alert, Box, Stack, IconButton, Snackbar, Chip } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SyncIcon from '@mui/icons-material/Sync';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import CableIcon from '@mui/icons-material/Cable';
 
 
 interface CameraListProps {
@@ -70,6 +72,13 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
         ) : (
           cameras.map((camera) => {
             const isActive = activeCameraIds.includes(camera.id);
+            const isOnvif = camera.type === 'onvif';
+
+            // Build secondary text based on camera type
+            const secondaryText = isOnvif
+              ? `${camera.host}:${camera.port}`
+              : `rtsp://${camera.host}:${camera.port}${camera.stream_path || '/'}`;
+
             return (
               <ListItem
                 key={camera.id}
@@ -82,19 +91,22 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                     >
                       {isActive ? 'Stop Stream' : 'View Stream'}
                     </Button>
-                    <IconButton
-                      edge="end"
-                      aria-label="sync time"
-                      onClick={() => handleSyncTime(camera.id)}
-                      disabled={syncingCameraId === camera.id}
-                      title="Sync camera time with server"
-                    >
-                      {syncingCameraId === camera.id ? (
-                        <CircularProgress size={24} />
-                      ) : (
-                        <SyncIcon />
-                      )}
-                    </IconButton>
+                    {/* Only show Sync button for ONVIF cameras */}
+                    {isOnvif && (
+                      <IconButton
+                        edge="end"
+                        aria-label="sync time"
+                        onClick={() => handleSyncTime(camera.id)}
+                        disabled={syncingCameraId === camera.id}
+                        title="Sync camera time with server"
+                      >
+                        {syncingCameraId === camera.id ? (
+                          <CircularProgress size={24} />
+                        ) : (
+                          <SyncIcon />
+                        )}
+                      </IconButton>
+                    )}
                     <IconButton
                       edge="end"
                       aria-label="delete"
@@ -106,7 +118,18 @@ const CameraList: React.FC<CameraListProps> = ({ cameras, loading, error, active
                   </Stack>
                 }
               >
-                <ListItemText primary={camera.name} secondary={`Host: ${camera.host}`} />
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip
+                    icon={isOnvif ? <VideocamIcon /> : <CableIcon />}
+                    label={isOnvif ? 'ONVIF' : 'RTSP'}
+                    size="small"
+                    color={isOnvif ? 'primary' : 'secondary'}
+                  />
+                  <ListItemText
+                    primary={camera.name}
+                    secondary={secondaryText}
+                  />
+                </Stack>
               </ListItem>
             );
           })

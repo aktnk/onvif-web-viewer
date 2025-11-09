@@ -1,21 +1,59 @@
 # ONVIF Web Application
 
-This is a full-stack web application designed to manage and view ONVIF-compliant IP cameras. It consists of a Node.js backend and a React frontend.
+This is a full-stack web application designed to manage and view ONVIF-compliant IP cameras and generic RTSP cameras. It consists of a Node.js backend and a React frontend, supporting multiple camera types with intelligent feature detection.
 
 ![Main Interface](docs/images/main.png)
 
 ## Features
 
+*   **Multi-Camera Type Support**: Seamlessly manage both ONVIF and RTSP cameras from a single interface.
+    *   **ONVIF Cameras**: Full feature support including discovery, time sync, and PTZ control
+    *   **RTSP Cameras**: Generic RTSP streams (IP cameras, MediaMTX, etc.) with streaming and recording capabilities
 *   **Camera Discovery**: Automatically discover ONVIF cameras on your local network using subnet scanning with unicast WS-Discovery probes.
-*   **Camera Management**: Register, update, delete, and list ONVIF cameras.
-*   **Time Synchronization**: Synchronize camera time with the server's system time via ONVIF protocol. Cameras are automatically synced when registered, and can be manually synced anytime.
+*   **Camera Management**: Register, update, delete, and list cameras. Each camera type is clearly identified with visual badges (ONVIF/RTSP).
+*   **Time Synchronization**: Synchronize ONVIF camera time with the server's system time. Cameras are automatically synced when registered, and can be manually synced anytime.
 *   **Multi-Camera Live Streaming**: View up to 4 live HLS streams simultaneously in a 2×2 grid layout. Each camera stream operates independently with its own controls.
-*   **PTZ Control**: Control Pan-Tilt-Zoom (PTZ) cameras directly from the web interface with intuitive directional controls and zoom slider. PTZ controls are automatically displayed for cameras that support the feature.
-*   **Independent Recording**: Record video from multiple cameras simultaneously. Each camera has its own recording controls. Auto-generates thumbnails from recordings.
+*   **PTZ Control**: Control Pan-Tilt-Zoom (PTZ) cameras directly from the web interface with intuitive directional controls and zoom slider. PTZ controls are automatically displayed for ONVIF cameras that support the feature.
+*   **Independent Recording**: Record video from multiple cameras simultaneously. Each camera has its own recording controls. Auto-generates thumbnails from recordings. Works with both ONVIF and RTSP cameras.
 *   **Video Playback**: Browse recordings in a 4-column grid with thumbnail previews. Play back recorded MP4 files in a modal player. Recordings from deleted cameras remain accessible.
-*   **Connection Testing**: Automatically tests the ONVIF connection to a camera before saving its details.
+*   **Connection Testing**: Automatically tests the ONVIF connection before saving camera details (ONVIF cameras only).
 *   **Session Persistence**: Active camera streams are automatically restored after page reload.
 *   **REST API**: Provides a simple API to interact with the camera data and streaming processes.
+
+## Camera Types and Capabilities
+
+This application supports two types of cameras with different feature sets:
+
+### ONVIF Cameras
+Full-featured IP cameras using the ONVIF protocol standard.
+
+**Supported Features:**
+- ✅ Live streaming (HLS)
+- ✅ Recording (MP4 with auto-generated thumbnails)
+- ✅ Network discovery (automatic camera detection)
+- ✅ Time synchronization with server
+- ✅ PTZ control (for cameras with PTZ support)
+- ✅ Connection testing before registration
+
+**Use Cases:** Professional IP cameras, NVRs, and network cameras that support ONVIF standards.
+
+### RTSP Cameras
+Generic RTSP streaming sources including IP cameras, MediaMTX servers, and other RTSP-compatible devices.
+
+**Supported Features:**
+- ✅ Live streaming (HLS)
+- ✅ Recording (MP4 with auto-generated thumbnails)
+- ❌ Network discovery (not available)
+- ❌ Time synchronization (not available)
+- ❌ PTZ control (not available)
+
+**Use Cases:**
+- Generic IP cameras with RTSP output
+- UVC (USB) cameras streamed through MediaMTX or similar RTSP servers
+- Custom RTSP sources
+- IP cameras without ONVIF support
+
+**Note:** For detailed information on setting up UVC cameras with MediaMTX for RTSP streaming, please refer to the [CLAUDE.md](CLAUDE.md) file in this repository.
 
 ## Screenshots
 
@@ -127,6 +165,7 @@ The backend uses [Knex.js](https://knexjs.org/) as a SQL query builder and migra
 - `20251016140916_add_xaddr_to_cameras.js` - Adds `xaddr` column for custom ONVIF URLs
 - `20251018120100_create_recordings_table.js` - Creates the `recordings` table
 - `20251031131841_add_thumbnail_to_recordings.js` - Adds `thumbnail` column for recording preview images
+- `20251109000000_add_rtsp_camera_support.js` - Adds RTSP camera support (type, stream_path, timestamps)
 
 **Common Knex Commands:**
 
@@ -151,11 +190,15 @@ npx knex migrate:make migration_name
 *cameras* table:
 - `id` (primary key, auto-increment)
 - `name` (text) - Camera display name
+- `type` (text) - Camera type: 'onvif' or 'rtsp' (default: 'onvif')
 - `host` (text) - IP address or hostname
-- `port` (integer) - ONVIF port (default: 80)
-- `user` (text) - ONVIF username
-- `pass` (text) - ONVIF password
-- `xaddr` (text, nullable) - Custom ONVIF device service URL
+- `port` (integer) - Port number (ONVIF: typically 80, RTSP: server-dependent)
+- `user` (text, nullable) - Authentication username
+- `pass` (text, nullable) - Authentication password
+- `xaddr` (text, nullable) - Custom ONVIF device service URL (ONVIF only)
+- `stream_path` (text, nullable) - RTSP stream path (RTSP cameras only, e.g., '/uvc_camera_1')
+- `created_at` (datetime) - Creation timestamp
+- `updated_at` (datetime) - Last update timestamp
 
 *recordings* table:
 - `id` (primary key, auto-increment)
@@ -196,11 +239,13 @@ The frontend development server will be running at `http://localhost:5173` and s
 
 Once the application is running, you can manage your cameras through the web interface.
 
-*   **Discovering Cameras**: Click the "Discover Cameras" button to automatically scan your local network. The scan will probe each IP address in your subnet and may take 2-3 minutes.
+*   **Discovering Cameras** (ONVIF only): Click the "Discover Cameras" button to automatically scan your local network. The scan will probe each IP address in your subnet and may take 2-3 minutes.
     *   Discovered cameras that are already registered will be marked as "Registered".
     *   You can add unregistered cameras by providing their credentials. The discovery window will remain open, allowing you to add multiple cameras without re-scanning.
-*   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog for the camera's details (Name, Host/IP, Port, Username, Password). The system tests the connection before adding the camera. After successful registration, the camera's time is automatically synchronized with the server.
-*   **Synchronizing Camera Time**: Click the sync icon (⟳) next to any camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors.
+*   **Adding a Camera Manually**: Click the "Add Camera" button to open a dialog where you can choose the camera type:
+    *   **ONVIF Camera**: Provide Name, Host/IP, Port, Username, Password (optional: xaddr). The system tests the ONVIF connection before adding. After successful registration, the camera's time is automatically synchronized with the server.
+    *   **RTSP Camera**: Provide Name, RTSP Server Host, Port, Stream Path, and optional credentials. This option supports generic RTSP sources including IP cameras, MediaMTX servers streaming from UVC cameras, and other RTSP-compatible devices. No connection test is performed - the stream will be validated when you start viewing it.
+*   **Synchronizing Camera Time** (ONVIF only): Click the sync icon (⟳) next to any ONVIF camera in the list to manually synchronize its time with the server's system time. A notification will confirm success or display any errors. This feature is not available for RTSP cameras.
 *   **Deleting a Camera**: Click the red delete icon (🗑️) next to a camera in the main list. A confirmation prompt will appear before deletion.
 *   **Viewing Multiple Streams**:
     *   Click the "View Stream" button next to a camera to add it to the grid view.
@@ -244,7 +289,33 @@ Discovers ONVIF cameras on the local network using subnet scanning. This endpoin
 **Response**: Returns an array of discovered devices with their IP addresses, ports, device names, and ONVIF service URLs.
 
 #### `POST /api/cameras`
-Registers a new camera. It tests the ONVIF connection before saving. The request body can optionally include a full `xaddr` for cameras with non-standard ONVIF URLs.
+Registers a new camera. For ONVIF cameras, it tests the connection before saving. For RTSP cameras, the stream is validated when viewing starts.
+
+**Request Body for ONVIF Camera**:
+```json
+{
+  "name": "Front Door Camera",
+  "type": "onvif",
+  "host": "192.168.1.100",
+  "port": 80,
+  "user": "admin",
+  "pass": "password",
+  "xaddr": "http://192.168.1.100:80/onvif/device_service"  // optional
+}
+```
+
+**Request Body for RTSP Camera**:
+```json
+{
+  "name": "USB Camera via MediaMTX",
+  "type": "rtsp",
+  "host": "localhost",
+  "port": 8554,
+  "stream_path": "/uvc_camera_1",
+  "user": "username",  // optional
+  "pass": "password"   // optional
+}
+```
 
 #### `PUT /api/cameras/:id`
 Updates an existing camera's information. Useful for adding or correcting details like the `xaddr`.

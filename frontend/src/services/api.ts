@@ -6,9 +6,11 @@ const API_URL = 'http://localhost:3001/api';
 export interface Camera {
   id: number;
   name: string;
+  type: 'onvif' | 'rtsp';
   host: string;
   port: number;
-  xaddr: string | null;
+  xaddr?: string | null;  // ONVIF only
+  stream_path?: string | null;  // RTSP only
   // We don't need user/pass on the frontend
 }
 
@@ -19,10 +21,13 @@ export const getCameras = async (): Promise<Camera[]> => {
 
 export type NewCamera = {
   name: string;
+  type: 'onvif' | 'rtsp';
   host: string;
   port: number;
-  user: string;
-  pass: string;
+  user?: string;
+  pass?: string;
+  xaddr?: string;  // ONVIF only
+  stream_path?: string;  // RTSP only
 };
 
 export const addCamera = async (camera: NewCamera): Promise<Camera> => {
@@ -146,5 +151,20 @@ export const stopPTZ = async (id: number): Promise<PTZResult> => {
     panTilt: true,
     zoom: true
   });
+  return response.data;
+};
+
+export interface CameraCapabilities {
+  streaming: boolean;
+  recording: boolean;
+  thumbnails: boolean;
+  ptz: boolean;
+  discovery: boolean;
+  timeSync: boolean;
+  remoteAccess: boolean;
+}
+
+export const getCameraCapabilities = async (id: number): Promise<CameraCapabilities> => {
+  const response = await axios.get<CameraCapabilities>(`${API_URL}/cameras/${id}/capabilities`);
   return response.data;
 };
