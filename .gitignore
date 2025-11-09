@@ -51,6 +51,10 @@ GEMINI.md
 /backend/recordings
 /backend/thumbnails
 
+# Sample
+/sample
+!/sample/mediamtx.yml
+
 # no need file
 test*.sh
 /bak
