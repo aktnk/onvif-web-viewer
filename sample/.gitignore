@@ -1,0 +1,8 @@
+# Ignore all files in this directory
+*
+
+# But track mediamtx.yml configuration file
+!mediamtx.yml
+
+# Don't ignore .gitignore itself
+!.gitignore
