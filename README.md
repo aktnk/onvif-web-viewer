@@ -53,7 +53,7 @@ Generic RTSP streaming sources including IP cameras, MediaMTX servers, and other
 - Custom RTSP sources
 - IP cameras without ONVIF support
 
-**Note:** For detailed information on setting up UVC cameras with MediaMTX for RTSP streaming, please refer to the [CLAUDE.md](CLAUDE.md) file in this repository.
+**Note:** For detailed information on setting up UVC cameras with MediaMTX for RTSP streaming, please refer to the [MediaMTX Setup Guide](docs/MEDIAMTX_SETUP.md).
 
 ## Screenshots
 
